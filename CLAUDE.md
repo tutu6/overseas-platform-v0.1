@@ -1,0 +1,435 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
+## 项目简介
+
+**「央企海外工程供应链平台」** —— 面向中国央企海外 EPC 项目的 B2B 供应链平台,前期主要业主为**中建三局**。
+
+平台包含三大能力:
+1. **严选商城** —— 类京东工业品的 B2B 电商前台,采购方按品类/国别浏览、加入采购清单、发起询价
+2. **AI 智能体工具箱** —— MVP 阶段 4 个 Agent(标准问答 / 证书审查 / 报价比价 / 多语种翻译)
+3. **履约风控中枢** —— 12 节点订单履约追踪 + 风控驾驶舱
+
+**当前阶段**:MVP 第一轮(认证、RBAC、审计底座)
+
+---
+
+## 设计文档(每次开发前必读)
+
+| 文档 | 内容 | 何时必读 |
+|---|---|---|
+| `docs/MVP业务流程共识_v1.2.md` | 整体业务范围、5 条主流程、角色定义、AI 占位约定 | 涉及业务逻辑时 |
+| `docs/RBAC与组织架构设计讨论_v1.2.md` | RBAC 设计、组织模型、权限矩阵、已闭环决策汇总 | 涉及权限/角色/组织时 |
+| `/Users/liujingjing/Documents/overseas-platform/overseas-supply-platform` | 参考工程代码,前端视觉与功能复用来源 | 前端开发时 |
+| `docs/prompts/prompt-01-*.md` | 具体某一轮的实施任务书 | 该轮实施时 |
+
+**遇到设计未覆盖时的处理顺序**:
+1. 查 RBAC 文档"已闭环决策汇总"章节
+2. 查业务流程共识文档
+3. 查当前实施 prompt
+4. 都没覆盖 → 选**最简方案** + 代码标注 `TODO: 设计未覆盖,采用最简实现`
+5. **绝不**自行扩展功能或发明新规则
+
+---
+
+## 技术栈(已锁定,不要替换)
+
+### 后端
+
+| 类目 | 选型 |
+|---|---|
+| 语言 | Python 3.11+ |
+| Web 框架 | FastAPI |
+| ORM | SQLAlchemy 2.0(async) |
+| 迁移 | Alembic |
+| 数据库 | **SQLite**(MVP 阶段,文件:`backend/dev.db`)|
+| 数据库驱动 | aiosqlite |
+| 校验 | Pydantic v2 |
+| JWT | python-jose[cryptography] |
+| 密码 | passlib[bcrypt] |
+| 配置 | pydantic-settings |
+| 测试 | pytest + httpx + pytest-asyncio |
+| 包管理 | **uv** |
+
+### 前端
+
+| 类目 | 选型 |
+|---|---|
+| 框架 | Next.js (App Router) + TypeScript |
+| UI | Tailwind CSS + Radix UI (shadcn 风格) |
+| 状态 | Zustand |
+| 表单 | react-hook-form + zod |
+| 数据请求 | fetch + SWR |
+| 包管理 | pnpm |
+
+### 不允许引入的依赖
+
+- ❌ PostgreSQL / MySQL / MongoDB(锁死 SQLite,等业务起量再切)
+- ❌ NextAuth.js(我们直接管 token)
+- ❌ Prisma(后端是 FastAPI + SQLAlchemy)
+- ❌ Redis(MVP 单机内存足够)
+- ❌ Docker / 容器化
+- ❌ i18n / next-intl(MVP 不做国际化)
+- ❌ 任何 OAuth / SSO / 2FA / 邮件 / 短信库
+
+---
+
+## 项目结构
+
+```
+overseas-supply-platform/
+├── backend/                    # Python 后端
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── core/               # config / security / dependencies / exceptions
+│   │   ├── db/
+│   │   │   ├── base.py
+│   │   │   ├── session.py
+│   │   │   └── models/         # ORM 模型,一个表一个文件
+│   │   ├── schemas/            # Pydantic
+│   │   ├── api/v1/             # 路由(按业务模块拆文件)
+│   │   ├── services/           # 业务逻辑
+│   │   ├── rbac/               # 权限常量、配置、Guard、启动同步
+│   │   ├── audit/              # 审计常量、中间件、写入工具
+│   │   └── seed.py             # 启动种子
+│   ├── alembic/                # 数据库迁移
+│   ├── tests/
+│   ├── scripts/                # verify.sh / reset_db.sh
+│   ├── pyproject.toml
+│   ├── .env.example
+│   └── README.md
+│
+├── frontend/                   # Next.js 前端
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (auth)/         # 登录/注册壳
+│   │   │   ├── (marketing)/    # 公开页面(落地、商城、目录等)
+│   │   │   ├── buyer/          # 采购方工作台
+│   │   │   ├── supplier/       # 供应商工作台
+│   │   │   ├── admin/          # 平台后台
+│   │   │   ├── ai/             # AI 智能体页面
+│   │   │   └── test/           # RBAC 测试页(MVP 临时)
+│   │   ├── components/
+│   │   │   ├── ui/             # 基础组件(shadcn 风格)
+│   │   │   └── auth/           # PermissionGuard 等
+│   │   ├── hooks/
+│   │   ├── lib/                # api / auth / permissions / utils
+│   │   ├── stores/             # Zustand
+│   │   └── middleware.ts       # 路由守卫
+│   ├── package.json
+│   └── README.md
+│
+├── docs/                       # 设计文档(必读)
+│   ├── MVP业务流程共识_v1.2.md
+│   ├── RBAC与组织架构设计讨论_v1.2.md
+│   ├── overseas-supply-platform.md
+│   └── prompts/                # 各轮实施 prompt
+│
+└── CLAUDE.md                   # 本文件
+```
+
+---
+
+## 核心设计原则(贯穿全项目)
+
+### 1. 最小可行性(MVP 第一原则)
+
+- 设计文档没列出的功能**一律不实现**
+- 不擅自扩展需求
+- V1.0 / V2.0 增量功能**全部不做**
+
+### 2. 角色与组织(详见 RBAC 文档)
+
+**4 个系统角色**(固定):
+- `BUYER` — 项目部采购员(挂 BuyerOrganization)
+- `SUPPLIER` — 供应商(挂 SupplierOrganization)
+- `OPERATOR` — 平台运营(不挂组织,业务管理员)
+- `ADMIN` — 系统管理员(不挂组织,系统管理员,**不触碰业务数据**)
+
+**2 个组织实体**(独立设计):
+- `BuyerOrganization` — 采购方组织,MVP 阶段仅"中建三局"1 条数据
+- `SupplierOrganization` — 供应商组织,N 条数据
+
+**关键约束**:
+- 任何业务数据查询必须按 Organization 边界过滤(BUYER 查 `buyer_org_id`,SUPPLIER 查 `supplier_id`)
+- OPERATOR 全平台业务数据可见,但不能改系统配置
+- ADMIN 只能改系统配置,**不能**访问业务数据
+
+### 3. RBAC 标准化(详见 RBAC 文档)
+
+**5 张标准 RBAC0 表**:User / Role / Permission / UserRole / RolePermission
+
+**权限点命名**:`resource:action`,小写冒号分隔(如 `user:read`、`supplier:approve`)
+
+**权限校验三级**:
+- 后端 API Guard(`require_permission(code)`,**安全底线**)
+- 前端路由守卫(`middleware.ts`)
+- 前端按钮显隐(`<PermissionGuard>` / `usePermissions().hasPermission()`)
+
+**绝对禁止**:
+- ❌ 在业务代码里 `if role == 'BUYER'` 写死判断
+- ❌ 在 JWT payload 里塞 permissions
+- ❌ 在登录响应里返回 permissions(必须通过 `/auth/me` 拿)
+
+### 4. AI 能力的"留占位 + 可降级"
+
+业务流程中潜在 AI 节点(资质 OCR、入驻 AI 初审、报价合理性提示等)优先级**靠后**,但**必须留占位**:
+
+- 业务逻辑、数据结构、UI 展示位置预留
+- Mock 实现填充,响应中带 `mock_ai: true` 标识
+- 接入真实模型时只替换实现,不动业务流程
+
+### 5. 审计与可追溯
+
+**Trace ID**(全链路):
+- 每个请求由中间件生成 UUID,写入 `request.state.trace_id` 和 contextvar
+- 所有日志格式带 `[trace=xxx]`
+- 所有响应头带 `X-Trace-Id`
+- 失败响应 body 也带 `trace_id`
+
+**审计日志**(只记敏感操作,不记 GET):
+- 登录成功/失败/锁定/登出
+- 注册、创建内部用户
+- 改密、角色分配/撤销
+- 任何业务写操作(POST/PUT/DELETE/PATCH)
+- 失败也要记
+
+### 6. 数据库设计约定
+
+- 主键统一 `Integer` 自增
+- 时间字段统一 `DateTime`,**应用层强制 UTC 存储**
+- 状态字段用 `VARCHAR` + 应用层 Enum 校验
+- JSON 字段用 SQLAlchemy `JSON` 类型(便于未来切 PG)
+- **禁止使用 SQLite 特有语法**(如 `INSERT OR REPLACE`),保持 ORM 抽象
+- 表名:复数小写下划线(`users`、`buyer_organizations`)
+- 不引入软删字段(MVP 不需要)
+
+### 7. 命名约定
+
+| 对象 | 规则 | 例子 |
+|---|---|---|
+| 权限点 | `resource:action` 小写冒号 | `user:read`、`supplier:approve` |
+| AuditResourceType | 小写下划线,与表名单数对齐 | `user`、`buyer_org` |
+| AuditAction | 大写下划线 | `LOGIN_SUCCESS`、`PASSWORD_CHANGE` |
+| 数据库表 | 复数小写下划线 | `users`、`buyer_organizations` |
+| Python 类 | 大驼峰 | `User`、`BuyerOrganization` |
+| Python 函数/变量 | 小写下划线 | `get_current_user` |
+| API 路径 | `/api/v1/<resource>/...`,小写连字符 | `/api/v1/admin/users` |
+| TypeScript 组件 | 大驼峰 | `PermissionGuard` |
+| TypeScript Hook | `use` 前缀小驼峰 | `usePermissions` |
+
+### 8. 前端与参考工程的关系
+
+**复用**(参考 `docs/overseas-supply-platform.md` 中的代码):
+- ✅ 页面视觉风格、布局、Tailwind 类、控件样式
+- ✅ 组件结构、文案、动效
+- ✅ 功能模块划分、入口位置
+
+**改造**:
+- ❌ 不复用 NextAuth(直接 fetch 后端 + localStorage 管 token)
+- ❌ 不复用 Prisma(后端用 SQLAlchemy)
+- ❌ 不复用具体 API 调用代码(按本项目后端契约重写)
+
+---
+
+## 接口约定
+
+### 统一响应格式
+
+**成功**:
+```json
+{ "code": 0, "message": "ok", "data": { ... } }
+```
+
+**失败**:
+```json
+{ "code": 40001, "message": "Invalid credentials", "data": null, "trace_id": "abc-123" }
+```
+
+- HTTP 状态码同步设置(200 / 400 / 401 / 403 / 404 / 422 / 429 / 500)
+- `code` 为业务码,0 = 成功,非 0 = 失败
+- 所有响应带 `X-Trace-Id` 响应头
+- 失败响应 body 包含 `trace_id`,成功响应不重复(已在 header)
+
+### API 路径
+
+- 统一前缀 `/api/v1/`
+- 资源用复数:`/api/v1/users`、`/api/v1/suppliers`
+- 子资源嵌套:`/api/v1/orders/{id}/milestones`
+- 动作类用动词后缀:`/api/v1/users/{id}/disable`
+
+### 错误处理
+
+- 错误信息**不暴露内部细节**
+- 登录失败统一返回"Invalid credentials"(不区分用户不存在/密码错,防枚举)
+- 数据查询无权限/数据不存在统一返回 404(不暴露存在性)
+
+---
+
+## 常用命令
+
+### 后端
+
+```bash
+cd backend
+
+# 依赖管理
+uv venv                                    # 创建虚拟环境
+source .venv/bin/activate                  # 激活
+uv pip install -e .                        # 安装项目(可编辑模式)
+uv pip install -e ".[dev]"                 # 安装含开发依赖
+
+# 数据库
+alembic revision --autogenerate -m "..."   # 生成迁移
+alembic upgrade head                       # 应用迁移
+alembic downgrade -1                       # 回滚一步
+bash scripts/reset_db.sh                   # 重置数据库(删 dev.db + 重跑迁移 + seed)
+
+# 开发
+uvicorn app.main:app --reload --port 8000  # 启动开发服务器
+pytest                                     # 跑测试
+pytest -k test_auth                        # 跑特定测试
+pytest --cov=app                           # 覆盖率
+bash scripts/verify.sh                     # curl 验证脚本
+
+# 访问
+# - API 文档: http://localhost:8000/docs
+# - 健康检查: http://localhost:8000/healthz
+```
+
+### 前端
+
+```bash
+cd frontend
+
+pnpm install               # 安装依赖
+pnpm dev                   # 开发模式(http://localhost:3000)
+pnpm build                 # 构建
+pnpm lint                  # ESLint
+```
+
+---
+
+## 环境变量
+
+### 后端 `.env`
+
+```bash
+# 数据库
+DATABASE_URL=sqlite+aiosqlite:///./dev.db
+
+# JWT
+JWT_SECRET_KEY=<openssl rand -hex 32 生成>
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# 初始超级管理员(种子)
+SUPER_ADMIN_EMAIL=superadmin@platform.local
+SUPER_ADMIN_INITIAL_PASSWORD=ChangeMe123
+
+# 日志
+LOG_LEVEL=INFO
+
+# CORS
+CORS_ORIGINS=http://localhost:3000
+```
+
+### 前端 `.env.local`
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+**密钥规则**:
+- ⚠️ 真实密钥**绝不**进 Git
+- `.env.example` 只放结构和示例值
+- `JWT_SECRET_KEY` 必须用 `openssl rand -hex 32` 生成
+
+---
+
+## 禁止事项(常见踩坑)
+
+❌ **不要**用 PostgreSQL / MySQL / MongoDB —— 锁死 SQLite
+❌ **不要**用 mock 数据替代真实 DB —— 所有列表必须从数据库查
+❌ **不要**用 SQLite 特有语法 —— 保持 ORM 抽象
+❌ **不要**在登录响应里塞 permissions —— 必须通过 `/auth/me` 拿
+❌ **不要**在 JWT payload 里塞 permissions —— 权限变更需即时生效
+❌ **不要**把权限判断写死在业务代码里(`if role == 'BUYER'`)—— 必须走 `require_permission`
+❌ **不要**让 ADMIN 拥有业务数据权限 —— 严格职责分离
+❌ **不要**让注册接口自动登录 —— 注册和登录是两个独立动作
+❌ **不要**让 `POST /admin/users` 能创建 BUYER/SUPPLIER —— 业务用户走自助注册
+❌ **不要**引入 NextAuth、Prisma —— 后端是 FastAPI,前端只做轻量 token 管理
+❌ **不要**引入 i18n / next-intl —— MVP 不做国际化
+❌ **不要**做用户头像生成、邮件、短信、OAuth、2FA、找回密码
+❌ **不要**做 PWA / SSG / ISR —— 一律动态渲染
+❌ **不要**把品牌名硬编码 —— 暂留 TODO 占位
+❌ **不要**写测试代码以外的次要功能 —— 不在 prompt 清单的一律不做
+❌ **不要**用裸 SQL,优先 ORM —— 跨数据库兼容
+❌ **不要**在前端硬编码 4 个角色对应权限点的判断 —— 必须用 `hasPermission('xxx:yyy')`
+❌ **不要**让 GET 请求写审计日志 —— 噪音大,价值低
+
+---
+
+## 提交规范
+
+### Commit 信息
+
+格式:`<type>(<scope>): <subject>`
+
+常用 type:
+- `feat` — 新功能
+- `fix` — 修复 bug
+- `refactor` — 重构(不影响功能)
+- `docs` — 文档
+- `test` — 测试
+- `chore` — 构建、依赖
+
+例:
+- `feat(auth): add buyer registration endpoint`
+- `fix(rbac): admin should not access business data`
+- `docs(rbac): update Q22 decision`
+
+### 分支
+
+- `main` — 主分支
+- `feat/<name>` — 功能分支
+- `fix/<name>` — 修复分支
+
+---
+
+## 待团队拍板的设计决策
+
+代码中遇到以下决策点,**按当前临时方案落地 + 标注 TODO**:
+
+| 编号 | 决策 | 当前方案 |
+|---|---|---|
+| Q22 | 角色-权限关系定义方式 | 配置文件 + 启动同步(`app/rbac/permissions_config.py`)|
+| Q23 | Role.scope 字段 | 引入字段,MVP 仅用 `GLOBAL` |
+| Q24 | OPERATOR 是否细分 | 不细分 |
+| Q25 | ADMIN 能否访问业务数据 | 严格分离 |
+| Q26 | super admin 密码策略 | 环境变量注入 + 强制改密 |
+| Q27 | 何时切换 PostgreSQL | MVP 用 SQLite,等业务起量评估 |
+
+完整待定点列表见 `docs/RBAC与组织架构设计讨论_v1.2.md` 和 `docs/MVP业务流程共识_v1.2.md`。
+
+---
+
+## 实施风格
+
+写代码时:
+
+1. **先读相关设计文档,再动手**
+2. **遇到模糊点 → 看本文件的"遇到设计未覆盖时的处理顺序"**
+3. **类型注解齐全**(Python 用类型提示,TypeScript 不用 any)
+4. **错误处理显式**,不吞异常
+5. **关键业务逻辑写注释**,说明"为什么"而不是"做了什么"
+6. **TODO 注释带编号**(如 `TODO(Q22): ...`),便于追溯
+7. **提交前自测**:后端 `pytest` + `verify.sh`,前端手动跑一遍登录流程
+
+---
+
+*文档结束*
