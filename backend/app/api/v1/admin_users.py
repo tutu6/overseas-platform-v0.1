@@ -19,7 +19,7 @@ router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 async def create_user(
     body: AdminUserCreateIn,
     request: Request,
-    current: CurrentUser = Depends(require_permission(Permissions.USER_CREATE)),
+    current: CurrentUser = Depends(require_permission(Permissions.USER_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     user = await user_service.create_internal_user(
@@ -50,7 +50,7 @@ async def create_user(
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
-    current: CurrentUser = Depends(require_permission(Permissions.USER_READ)),
+    current: CurrentUser = Depends(require_permission(Permissions.USER_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     items, total = await user_service.list_users(db, page=page, page_size=page_size)

@@ -1,73 +1,89 @@
-"""角色 → 权限点 分配表。
+"""角色 → 权限点 分配表(v3 §3 权威清单)。
 
-# TODO(Q22): 角色-权限关系定义方式待团队拍板。当前实现:配置文件 + 启动同步(预倾向方案 C)。
-# TODO(Q24): OPERATOR 不细分,后续按需要再拆。
-# TODO(Q25): ADMIN 严格不触碰业务数据;若拍板调整,直接改本字典即可。
+设计原则:
+- 权限点 code 不带 scope 后缀(:own/:all/:org 禁止)
+- 4 角色拿到的是同一个 code,差异由 scope_config.py 决定
+- auth:* 给所有角色(系统底层会话)
+
+# TODO(Q22): 角色-权限关系定义方式 — 当前实现:配置文件 + 启动同步(方案 C)
+# TODO(Q25): ADMIN 严格不触业务数据(本配置严格遵守)
 """
 from __future__ import annotations
 
 from app.rbac.constants import Permissions
 
+# 所有角色都需要的会话权限(auth:*)
+_AUTH_BASE = [
+    Permissions.AUTH_LOGIN,
+    Permissions.AUTH_LOGOUT,
+    Permissions.AUTH_ME,
+]
+
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "BUYER": [
-        # 底座
-        Permissions.AUTH_LOGIN,
-        Permissions.AUTH_LOGOUT,
-        Permissions.AUTH_ME,
-        Permissions.BUYER_ORG_READ,
-        # 业务(BUYER 工作台)
-        Permissions.BUYER_DASHBOARD_READ,
+        *_AUTH_BASE,
+        # 公开池(read)
+        Permissions.SUPPLIER_READ,
+        Permissions.PRODUCT_READ,
+        Permissions.COUNTRY_READ,
+        # 采购流程
+        Permissions.PROJECT_READ,
+        Permissions.PROJECT_WRITE,
+        Permissions.PURCHASE_LIST_READ,
+        Permissions.PURCHASE_LIST_WRITE,
+        Permissions.CART_READ,
+        Permissions.CART_WRITE,
+        Permissions.RFQ_READ,
+        Permissions.RFQ_CREATE,
+        Permissions.QUOTE_READ,
+        Permissions.ORDER_READ,
+        Permissions.ORDER_WRITE,
+    ],
+    "SUPPLIER": [
+        *_AUTH_BASE,
+        # 自家档案 + 公开池
+        Permissions.SUPPLIER_READ,
+        Permissions.SUPPLIER_WRITE,
+        Permissions.PRODUCT_READ,
+        Permissions.PRODUCT_WRITE,
+        Permissions.COUNTRY_READ,
+        # 响应业务
+        Permissions.RFQ_READ,
+        Permissions.RFQ_RESPOND,
+        Permissions.QUOTE_READ,
+        Permissions.QUOTE_WRITE,
+        Permissions.ORDER_READ,
+        Permissions.ORDER_WRITE,
+        Permissions.ORDER_CHECKIN,
+        Permissions.MEMBERSHIP_READ,
+        Permissions.MEMBERSHIP_WRITE,
+    ],
+    "OPERATOR": [
+        *_AUTH_BASE,
+        # 业务全量(scope=ALL)
+        Permissions.SUPPLIER_READ,
+        Permissions.SUPPLIER_APPROVE,
+        Permissions.SUPPLIER_REJECT,
+        Permissions.PRODUCT_READ,
+        Permissions.PRODUCT_APPROVE,
+        Permissions.PRODUCT_REJECT,
+        Permissions.COUNTRY_READ,
+        Permissions.COUNTRY_WRITE,
         Permissions.PROJECT_READ,
         Permissions.PURCHASE_LIST_READ,
         Permissions.RFQ_READ,
+        Permissions.QUOTE_READ,
         Permissions.ORDER_READ,
-        Permissions.DOCUMENT_READ,
-    ],
-    "SUPPLIER": [
-        # 底座
-        Permissions.AUTH_LOGIN,
-        Permissions.AUTH_LOGOUT,
-        Permissions.AUTH_ME,
-        Permissions.SUPPLIER_ORG_READ,
-        Permissions.SUPPLIER_ORG_WRITE,
-        # 业务(SUPPLIER 工作台)
-        Permissions.SUPPLIER_DASHBOARD_READ,
         Permissions.MEMBERSHIP_READ,
-        Permissions.PRODUCT_READ,
-        Permissions.RFQ_RESPOND,
-        Permissions.ORDER_READ,
-    ],
-    "OPERATOR": [
-        # 底座
-        Permissions.AUTH_LOGIN,
-        Permissions.AUTH_LOGOUT,
-        Permissions.AUTH_ME,
-        Permissions.USER_READ,
-        Permissions.BUYER_ORG_READ,
-        Permissions.SUPPLIER_ORG_READ,
-        # 业务(OPERATOR 后台)
-        Permissions.OPERATOR_DASHBOARD_READ,
-        Permissions.SUPPLIER_APPROVE,
-        Permissions.PRODUCT_APPROVE,
-        Permissions.ORDER_READ_ALL,
-        Permissions.COUNTRY_WRITE,
         Permissions.RISK_READ,
     ],
     "ADMIN": [
-        # 底座 + 系统(严格不触业务数据 - Q25)
-        Permissions.AUTH_LOGIN,
-        Permissions.AUTH_LOGOUT,
-        Permissions.AUTH_ME,
-        Permissions.USER_READ,
-        Permissions.USER_CREATE,
-        Permissions.USER_UPDATE,
-        Permissions.USER_DISABLE,
-        Permissions.ROLE_READ,
+        *_AUTH_BASE,
+        # 系统级,严格不触业务(Q25)
+        Permissions.USER_MANAGE,
         Permissions.ROLE_MANAGE,
-        Permissions.PERMISSION_READ,
-        Permissions.USER_ROLE_ASSIGN,
-        Permissions.USER_ROLE_REVOKE,
-        Permissions.AUDIT_LOG_READ,
+        Permissions.PERMISSION_MANAGE,
         Permissions.SYSTEM_CONFIG,
+        Permissions.SYSTEM_AUDIT,
     ],
 }

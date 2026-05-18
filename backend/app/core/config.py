@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     LOGIN_RATE_LIMIT_MAX_FAILURES: int = 5
     LOGIN_RATE_LIMIT_LOCK_SECONDS: int = 300
 
+    # 调试 API(/api/_debug/*)是否开启;生产应关闭
+    ENABLE_DEBUG_API: bool = True
+
     @computed_field  # type: ignore[misc]
     @property
     def CORS_ORIGINS(self) -> List[str]:

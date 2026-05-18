@@ -5,7 +5,7 @@ import { Permissions } from "@/lib/permissions";
 
 export default function Page() {
   return (
-    <RouteGuard requiredPermission={Permissions.MEMBERSHIP_READ}>
+    <RouteGuard requiredPermissions={[Permissions.MEMBERSHIP_READ]}>
       <PermissionPlaceholderPage />
     </RouteGuard>
   );
