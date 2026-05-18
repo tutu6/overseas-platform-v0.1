@@ -177,25 +177,35 @@ async def test_me_permissions_match_config(client):
     me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     perms = set(me.json()["data"]["permissions"])
     assert perms == set(ROLE_PERMISSIONS["OPERATOR"])
-    assert Permissions.USER_CREATE not in perms  # OPERATOR 没有创建用户权限
+    assert Permissions.USER_MANAGE not in perms  # OPERATOR 无系统权限
 
 
 @pytest.mark.asyncio
 async def test_business_permissions_isolated_per_role(client):
-    """业务权限点严格隔离:BUYER 不应有 SUPPLIER 业务权限,反之亦然。"""
+    """业务权限点严格隔离(v3 §3)。"""
     # BUYER
     b_email, b_pwd = await _register_buyer(client)
     b_token = await _login(client, b_email, b_pwd)
     b_perms = set((await client.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {b_token}"}
     )).json()["data"]["permissions"])
+    # BUYER 应有(采购流程 + 公开池只读)
     assert Permissions.PROJECT_READ in b_perms
-    assert Permissions.RFQ_READ in b_perms
-    assert Permissions.ORDER_READ in b_perms
-    # 不应有
-    assert Permissions.PRODUCT_READ not in b_perms       # 供应商商品
-    assert Permissions.SUPPLIER_APPROVE not in b_perms   # 运营审核
-    assert Permissions.SYSTEM_CONFIG not in b_perms      # 系统配置
+    assert Permissions.PROJECT_WRITE in b_perms
+    assert Permissions.RFQ_CREATE in b_perms
+    assert Permissions.CART_WRITE in b_perms
+    assert Permissions.SUPPLIER_READ in b_perms
+    assert Permissions.PRODUCT_READ in b_perms
+    # BUYER 不应有
+    assert Permissions.SUPPLIER_WRITE not in b_perms
+    assert Permissions.PRODUCT_WRITE not in b_perms
+    assert Permissions.SUPPLIER_APPROVE not in b_perms
+    assert Permissions.RFQ_RESPOND not in b_perms
+    assert Permissions.QUOTE_WRITE not in b_perms
+    assert Permissions.MEMBERSHIP_READ not in b_perms
+    assert Permissions.RISK_READ not in b_perms
+    assert Permissions.SYSTEM_CONFIG not in b_perms
+    assert Permissions.USER_MANAGE not in b_perms
 
     # SUPPLIER
     s_email, s_pwd = await _register_supplier(client)
@@ -203,22 +213,60 @@ async def test_business_permissions_isolated_per_role(client):
     s_perms = set((await client.get(
         "/api/v1/auth/me", headers={"Authorization": f"Bearer {s_token}"}
     )).json()["data"]["permissions"])
-    assert Permissions.PRODUCT_READ in s_perms
+    # SUPPLIER 应有
+    assert Permissions.SUPPLIER_WRITE in s_perms
+    assert Permissions.PRODUCT_WRITE in s_perms
     assert Permissions.RFQ_RESPOND in s_perms
-    assert Permissions.SUPPLIER_ORG_WRITE in s_perms
-    assert Permissions.PROJECT_READ not in s_perms       # 采购方项目
-    assert Permissions.OPERATOR_DASHBOARD_READ not in s_perms
+    assert Permissions.QUOTE_WRITE in s_perms
+    assert Permissions.ORDER_CHECKIN in s_perms
+    assert Permissions.MEMBERSHIP_WRITE in s_perms
+    # SUPPLIER 不应有
+    assert Permissions.PROJECT_READ not in s_perms
+    assert Permissions.CART_READ not in s_perms
+    assert Permissions.RFQ_CREATE not in s_perms
+    assert Permissions.SUPPLIER_APPROVE not in s_perms
+    assert Permissions.RISK_READ not in s_perms
+    assert Permissions.SYSTEM_CONFIG not in s_perms
 
 
 @pytest.mark.asyncio
-async def test_admin_has_system_config_but_no_business(client):
-    """ADMIN 严格不触业务数据(Q25)— 只有系统/RBAC 权限,无业务权限。"""
+async def test_admin_has_system_only_no_business(client):
+    """ADMIN 严格不触业务数据(Q25 / v3 §3.1):仅 user/role/permission/system。"""
     token = await _login(client, SUPER_EMAIL, SUPER_PASS)
     me = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     perms = set(me.json()["data"]["permissions"])
+    # 系统权限应有
+    assert Permissions.USER_MANAGE in perms
+    assert Permissions.ROLE_MANAGE in perms
+    assert Permissions.PERMISSION_MANAGE in perms
     assert Permissions.SYSTEM_CONFIG in perms
-    assert Permissions.USER_CREATE in perms
-    # 业务权限点不应有
-    for p in [Permissions.PROJECT_READ, Permissions.PRODUCT_READ, Permissions.RFQ_READ,
-              Permissions.ORDER_READ, Permissions.SUPPLIER_APPROVE, Permissions.RISK_READ]:
+    assert Permissions.SYSTEM_AUDIT in perms
+    # 业务权限点全部不应有
+    for p in [
+        Permissions.SUPPLIER_READ, Permissions.PRODUCT_READ, Permissions.COUNTRY_READ,
+        Permissions.PROJECT_READ, Permissions.PURCHASE_LIST_READ, Permissions.CART_READ,
+        Permissions.RFQ_READ, Permissions.QUOTE_READ, Permissions.ORDER_READ,
+        Permissions.MEMBERSHIP_READ, Permissions.RISK_READ,
+        Permissions.SUPPLIER_APPROVE, Permissions.PRODUCT_APPROVE, Permissions.COUNTRY_WRITE,
+    ]:
         assert p not in perms, f"ADMIN 不应有业务权限 {p}"
+
+
+@pytest.mark.asyncio
+async def test_operator_has_business_no_system(client):
+    """OPERATOR 业务全量 + 审核,不触系统。"""
+    email, pwd = await _create_operator_via_super_admin(client)
+    token = await _login(client, email, pwd)
+    perms = set((await client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+    )).json()["data"]["permissions"])
+    # 业务应有
+    assert Permissions.SUPPLIER_APPROVE in perms
+    assert Permissions.PRODUCT_APPROVE in perms
+    assert Permissions.COUNTRY_WRITE in perms
+    assert Permissions.RISK_READ in perms
+    assert Permissions.PROJECT_READ in perms
+    # 系统权限不应有
+    for p in [Permissions.USER_MANAGE, Permissions.ROLE_MANAGE,
+              Permissions.PERMISSION_MANAGE, Permissions.SYSTEM_CONFIG, Permissions.SYSTEM_AUDIT]:
+        assert p not in perms, f"OPERATOR 不应有系统权限 {p}"
