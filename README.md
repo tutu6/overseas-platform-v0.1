@@ -4,6 +4,16 @@
 
 ## 一键启动(开发模式)
 
+### 0. PostgreSQL(本机 brew @16,端口 5433)
+
+```bash
+brew install postgresql@16
+# 改 /opt/homebrew/var/postgresql@16/postgresql.conf 中 port=5433(避 EnterpriseDB pg13 占的 5432)
+brew services start postgresql@16
+/opt/homebrew/opt/postgresql@16/bin/createdb -p 5433 overseas_supply_dev
+/opt/homebrew/opt/postgresql@16/bin/createdb -p 5433 overseas_supply_test
+```
+
 ### 1. 后端
 
 ```bash
@@ -47,7 +57,7 @@ bash scripts/verify.sh
 
 | 维度 | 完成项 |
 |---|---|
-| 后端 | FastAPI + SQLAlchemy 2.0 async + Alembic + SQLite + uv |
+| 后端 | FastAPI + SQLAlchemy 2.0 async + Alembic + PostgreSQL 16 + uv |
 | 表 | 10 张(User / Role / Permission / UserRole / RolePermission / BuyerOrg / SupplierOrg / BuyerMember / SupplierMember / AuditLog)|
 | 接口 | 注册(BUYER/SUPPLIER 各一个)/ 登录 / `/auth/me` / 改密 / 登出 / 内部账号创建+列表 / 4 个 RBAC 测试 |
 | 安全 | 密码 8-32 位 1 字母 1 数字、登录限流 60s 内 5 次锁 5 分钟、JWT 不带 permissions、`/auth/me` 实时权威 |
@@ -94,4 +104,4 @@ overseas-platform-v0.1/
 | Q24 | OPERATOR 是否细分 | 不细分 |
 | Q25 | ADMIN 能否访问业务数据 | 严格分离 |
 | Q26 | super admin 密码策略 | 环境变量注入 + 强制改密 |
-| Q27 | 何时切 PostgreSQL | MVP 用 SQLite,业务起量再评估 |
+| Q27 | 何时切 PostgreSQL | ✅ 已切(2026-05-18,brew @16 端口 5433) |

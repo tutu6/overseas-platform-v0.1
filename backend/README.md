@@ -1,10 +1,17 @@
 # Backend · 认证 / RBAC / 审计底座
 
-> MVP 第一轮:FastAPI + SQLAlchemy 2.0(async) + Alembic + SQLite + uv
+> FastAPI + SQLAlchemy 2.0(async) + Alembic + **PostgreSQL 16** + uv
 
 ## 快速开始
 
 ```bash
+# 0. PostgreSQL(本机 brew @16,端口 5433 避开 EnterpriseDB pg13)
+brew install postgresql@16
+brew services start postgresql@16
+# 改 /opt/homebrew/var/postgresql@16/postgresql.conf 里 port=5433,然后重启
+/opt/homebrew/opt/postgresql@16/bin/createdb -p 5433 overseas_supply_dev
+/opt/homebrew/opt/postgresql@16/bin/createdb -p 5433 overseas_supply_test
+
 cd backend
 
 # 1. 装依赖(uv)
@@ -39,7 +46,7 @@ pytest -k auth         # 子集
 pytest --cov=app       # 覆盖率
 ```
 
-测试用内存 SQLite,完全隔离 `dev.db`。
+测试连 `overseas_supply_test` 库,每个测试函数 drop+create,完全隔离 `overseas_supply_dev`。
 
 ## curl 自检
 
@@ -51,14 +58,14 @@ bash scripts/verify.sh
 ## 数据库重置(只用于开发)
 
 ```bash
-bash scripts/reset_db.sh   # 删 dev.db → 重跑迁移
+bash scripts/reset_db.sh   # drop + create overseas_supply_dev → 重跑迁移
 ```
 
 ## 关键设计
 
 | 维度 | 实现 |
 |---|---|
-| 数据库 | SQLite + aiosqlite(MVP)。**禁止 SQLite 特有语法**,保 ORM 抽象。TODO(Q27):业务起量后评估切 PG。 |
+| 数据库 | PostgreSQL 16 + asyncpg(本机 brew 端口 5433)。**禁止厂商特有语法**,保 ORM 抽象。 |
 | 时间 | 应用层强制 UTC(`datetime.now(timezone.utc)`)|
 | 密码 | bcrypt(passlib),规则 8-32 位 + 至少 1 字母 1 数字 |
 | JWT | HS256,access 15min / refresh 7d,**不放 permissions**(走 `/auth/me`)|
@@ -119,4 +126,4 @@ app/
 | Q24 OPERATOR 是否细分 | 不细分 | `app/rbac/permissions_config.py` |
 | Q25 ADMIN 业务数据访问 | 严格分离 | `app/rbac/permissions_config.py` |
 | Q26 super admin 密码策略 | 环境变量注入 + 强制改密 | `app/seed.py` |
-| Q27 何时切 PostgreSQL | MVP 用 SQLite,业务起量再评估 | `app/db/session.py` |
+| Q27 何时切 PostgreSQL | ✅ 已切(2026-05-18) | `app/db/session.py` |
