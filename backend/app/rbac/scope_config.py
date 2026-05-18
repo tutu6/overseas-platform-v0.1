@@ -44,6 +44,14 @@ RESOURCES: dict[str, dict[str, str]] = {
 
 
 # 角色 × 资源域 → scope 值(v3 §4 权威表)
+#
+# ---- 业务粒度决策(2026-05-18 拍板,等业务流程 3 上线时遵循)----
+# Q:BUYER 看到的项目/采购清单/订单 范围是?
+# A:方案 A —— 同组织内所有数据(scope=ORG)
+#    含义:中建三局任一 BUYER 登录,能看到中建三局所有 BUYER 创建的所有项目
+#    实现:service 层 WHERE buyer_organization_id = current_user.organization_id
+#    暂不实现:项目成员制(B 方案) / 项目内角色制(C 方案);后续按需加 project_members 表
+# ----------------------------------------------------------------
 ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
     "BUYER": {
         "supplier":      Scope.ALL,
