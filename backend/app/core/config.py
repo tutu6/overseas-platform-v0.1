@@ -16,8 +16,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # 数据库
-    DATABASE_URL: str = "sqlite+aiosqlite:///./dev.db"
+    # 数据库 — PostgreSQL(本机 brew @16,端口 5433 以避开 EnterpriseDB pg13)
+    DATABASE_URL: str = "postgresql+asyncpg://liujingjing@localhost:5433/overseas_supply_dev"
 
     # JWT
     JWT_SECRET_KEY: str = Field(..., min_length=16)

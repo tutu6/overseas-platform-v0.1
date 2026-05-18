@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # SQLite 加列要用 batch
+    # batch_alter_table 兼容写法(PG/SQLite 都能跑)
     with op.batch_alter_table("users") as b:
         b.add_column(sa.Column("username", sa.String(length=50), nullable=True))
         b.create_unique_constraint("uq_users_username", ["username"])

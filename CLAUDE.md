@@ -45,8 +45,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Web 框架 | FastAPI |
 | ORM | SQLAlchemy 2.0(async) |
 | 迁移 | Alembic |
-| 数据库 | **SQLite**(MVP 阶段,文件:`backend/dev.db`)|
-| 数据库驱动 | aiosqlite |
+| 数据库 | **PostgreSQL 16**(本机 brew 安装,端口 5433 — 避开 EnterpriseDB pg13 默认 5432)|
+| 数据库 — dev 库 | `overseas_supply_dev` |
+| 数据库 — test 库 | `overseas_supply_test` |
+| 数据库驱动 | asyncpg(async)+ psycopg(alembic 同步用)|
 | 校验 | Pydantic v2 |
 | JWT | python-jose[cryptography] |
 | 密码 | passlib[bcrypt] |
@@ -67,7 +69,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 不允许引入的依赖
 
-- ❌ PostgreSQL / MySQL / MongoDB(锁死 SQLite,等业务起量再切)
+- ❌ MySQL / MongoDB(已选 PostgreSQL,不要再换)
 - ❌ NextAuth.js(我们直接管 token)
 - ❌ Prisma(后端是 FastAPI + SQLAlchemy)
 - ❌ Redis(MVP 单机内存足够)
@@ -202,8 +204,9 @@ overseas-supply-platform/
 - 主键统一 `Integer` 自增
 - 时间字段统一 `DateTime`,**应用层强制 UTC 存储**
 - 状态字段用 `VARCHAR` + 应用层 Enum 校验
-- JSON 字段用 SQLAlchemy `JSON` 类型(便于未来切 PG)
-- **禁止使用 SQLite 特有语法**(如 `INSERT OR REPLACE`),保持 ORM 抽象
+- JSON 字段用 SQLAlchemy `JSON` 类型(PG 上自动落 JSONB)
+- **禁止使用任何数据库特有语法**(如 `INSERT OR REPLACE` / SQLite-only / 厂商私有 PG 函数等),保持 ORM 抽象
+- 时间字段:应用层 UTC,DB 列用 `TIMESTAMP WITHOUT TIME ZONE`,`_utcnow()` 返回 naive UTC datetime(避免 PG aware/naive 冲突)
 - 表名:复数小写下划线(`users`、`buyer_organizations`)
 - 不引入软删字段(MVP 不需要)
 
@@ -286,7 +289,7 @@ uv pip install -e ".[dev]"                 # 安装含开发依赖
 alembic revision --autogenerate -m "..."   # 生成迁移
 alembic upgrade head                       # 应用迁移
 alembic downgrade -1                       # 回滚一步
-bash scripts/reset_db.sh                   # 重置数据库(删 dev.db + 重跑迁移 + seed)
+bash scripts/reset_db.sh                   # 重置数据库(drop + recreate overseas_supply_dev + 重跑迁移 + seed)
 
 # 开发
 uvicorn app.main:app --reload --port 8000  # 启动开发服务器
@@ -319,7 +322,7 @@ pnpm lint                  # ESLint
 
 ```bash
 # 数据库
-DATABASE_URL=sqlite+aiosqlite:///./dev.db
+DATABASE_URL=postgresql+asyncpg://liujingjing@localhost:5433/overseas_supply_dev
 
 # JWT
 JWT_SECRET_KEY=<openssl rand -hex 32 生成>
@@ -353,9 +356,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ## 禁止事项(常见踩坑)
 
-❌ **不要**用 PostgreSQL / MySQL / MongoDB —— 锁死 SQLite
+❌ **不要**换数据库 —— 已锁定 PostgreSQL,不要再切 MySQL / MongoDB / SQLite
 ❌ **不要**用 mock 数据替代真实 DB —— 所有列表必须从数据库查
-❌ **不要**用 SQLite 特有语法 —— 保持 ORM 抽象
+❌ **不要**用数据库特有/厂商私有语法 —— 保持 ORM 抽象
 ❌ **不要**在登录响应里塞 permissions —— 必须通过 `/auth/me` 拿
 ❌ **不要**在 JWT payload 里塞 permissions —— 权限变更需即时生效
 ❌ **不要**把权限判断写死在业务代码里(`if role == 'BUYER'`)—— 必须走 `require_permission`
@@ -412,7 +415,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | Q24 | OPERATOR 是否细分 | 不细分 |
 | Q25 | ADMIN 能否访问业务数据 | 严格分离 |
 | Q26 | super admin 密码策略 | 环境变量注入 + 强制改密 |
-| Q27 | 何时切换 PostgreSQL | MVP 用 SQLite,等业务起量评估 |
+| Q27 | 何时切换 PostgreSQL | ✅ **已切**(2026-05-18,brew @16 端口 5433) |
 
 完整待定点列表见 `docs/RBAC与组织架构设计讨论_v1.2.md` 和 `docs/MVP业务流程共识_v1.2.md`。
 
