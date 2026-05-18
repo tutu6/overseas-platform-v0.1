@@ -1,7 +1,8 @@
 "use client";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { authApi, defaultLandingPath } from "@/lib/auth";
+import { authApi } from "@/lib/auth";
+import { defaultDashboardOf } from "@/config/navigation";
 import { clearTokens, getToken, setTokens } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -47,7 +48,7 @@ export function useLogin() {
     if (me.must_change_password) {
       router.replace("/change-password");
     } else {
-      router.replace(defaultLandingPath(me.roles));
+      router.replace(defaultDashboardOf(me.roles));
     }
   };
 }

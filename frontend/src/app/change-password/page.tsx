@@ -5,7 +5,8 @@ import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2 } from "lucid
 
 import { RouteGuard } from "@/components/auth/RouteGuard";
 import { Label } from "@/components/ui/label";
-import { authApi, defaultLandingPath } from "@/lib/auth";
+import { authApi } from "@/lib/auth";
+import { defaultDashboardOf } from "@/config/navigation";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -35,7 +36,7 @@ function Inner() {
       await authApi.changePassword(oldPwd, newPwd);
       const me = await authApi.me();
       setUser(me);
-      router.replace(defaultLandingPath(me.roles));
+      router.replace(defaultDashboardOf(me.roles));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "修改失败,请稍后重试");
     } finally {

@@ -94,11 +94,4 @@ export interface MeBasic {
   must_change_password: boolean;
 }
 
-/** 根据角色推断初始跳转地址(登录后)。 */
-export function defaultLandingPath(roles: RoleCode[]): string {
-  if (roles.includes("ADMIN")) return "/test/admin-only";
-  if (roles.includes("OPERATOR")) return "/test/operator-only";
-  if (roles.includes("SUPPLIER")) return "/test/supplier-only";
-  if (roles.includes("BUYER")) return "/test/buyer-only";
-  return "/";
-}
+// 登录后跳转逻辑见 src/config/navigation.ts → defaultDashboardOf
