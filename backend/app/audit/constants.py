@@ -32,5 +32,7 @@ class AuditAction(str, Enum):
     EMAIL_CHANGE = "EMAIL_CHANGE"       # 改登录邮箱
     USERNAME_CHANGE = "USERNAME_CHANGE" # 改/清空登录用户名
     PHONE_CHANGE = "PHONE_CHANGE"       # 改/清空登录手机号
+    USER_DISABLE = "USER_DISABLE"       # ADMIN 停用账号
+    USER_ENABLE = "USER_ENABLE"         # ADMIN 启用账号
     ROLE_ASSIGN = "ROLE_ASSIGN"
     ROLE_REVOKE = "ROLE_REVOKE"

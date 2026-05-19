@@ -7,6 +7,7 @@ from starlette.requests import Request
 
 from app.audit.constants import AuditAction, AuditResourceType
 from app.audit.logger import write_audit
+from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailedError
 from app.core.security import hash_password, validate_password_strength
 from app.db.models.permission import Permission  # noqa: F401  (确保 metadata 注册)
@@ -118,3 +119,109 @@ async def list_users(
 
     items = [(u, sorted(roles_by_user.get(u.id, []))) for u in users]
     return items, total
+
+
+async def _count_active_admins(db: AsyncSession) -> int:
+    row = await db.execute(
+        select(func.count(User.id.distinct()))
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .where(Role.code == RoleCode.ADMIN, User.status == UserStatus.ACTIVE)
+    )
+    return int(row.scalar_one())
+
+
+async def _user_has_role(db: AsyncSession, user_id: int, role_code: str) -> bool:
+    row = await db.execute(
+        select(UserRole.id)
+        .join(Role, Role.id == UserRole.role_id)
+        .where(UserRole.user_id == user_id, Role.code == role_code)
+    )
+    return row.scalar_one_or_none() is not None
+
+
+async def disable_user(
+    db: AsyncSession,
+    *,
+    target_user_id: int,
+    actor_user_id: int,
+    actor_user_email: str,
+    request: Request | None = None,
+) -> User:
+    """停用账号(status=DISABLED)。
+
+    规则:
+    - 不能停用自己
+    - 不能停用 super admin(env 注入的零号账号)
+    - 不能停用最后一个可用 ADMIN(防系统失联)
+    - 已 DISABLED → 幂等返回,不写审计
+    """
+    target = await db.get(User, target_user_id)
+    if target is None:
+        raise NotFoundError("User not found")
+
+    if target.id == actor_user_id:
+        raise ValidationFailedError("不能停用自己的账号")
+
+    if target.email == settings.SUPER_ADMIN_EMAIL:
+        raise ValidationFailedError("不能停用 super admin 账号")
+
+    if target.status == UserStatus.DISABLED:
+        return target  # 幂等
+
+    # 最后一个可用 ADMIN 保护
+    if await _user_has_role(db, target.id, RoleCode.ADMIN):
+        active_admins = await _count_active_admins(db)
+        if active_admins <= 1:
+            raise ValidationFailedError("系统至少保留一个可用 ADMIN,无法停用该账号")
+
+    target.status = UserStatus.DISABLED
+
+    await write_audit(
+        db,
+        resource_type=AuditResourceType.USER,
+        action=AuditAction.USER_DISABLE,
+        user_id=actor_user_id,
+        user_email=actor_user_email,
+        resource_id=target.id,
+        request=request,
+        extra={"target_user_id": target.id, "target_email": target.email},
+        commit=False,
+    )
+    await db.commit()
+    await db.refresh(target)
+    return target
+
+
+async def enable_user(
+    db: AsyncSession,
+    *,
+    target_user_id: int,
+    actor_user_id: int,
+    actor_user_email: str,
+    request: Request | None = None,
+) -> User:
+    """启用账号(status=ACTIVE)。已 ACTIVE → 幂等返回。"""
+    target = await db.get(User, target_user_id)
+    if target is None:
+        raise NotFoundError("User not found")
+
+    if target.status == UserStatus.ACTIVE:
+        return target
+
+    target.status = UserStatus.ACTIVE
+
+    await write_audit(
+        db,
+        resource_type=AuditResourceType.USER,
+        action=AuditAction.USER_ENABLE,
+        user_id=actor_user_id,
+        user_email=actor_user_email,
+        resource_id=target.id,
+        request=request,
+        extra={"target_user_id": target.id, "target_email": target.email},
+        commit=False,
+    )
+    await db.commit()
+    await db.refresh(target)
+    return target
