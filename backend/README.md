@@ -35,8 +35,37 @@ uvicorn app.main:app --reload --port 8000
 
 启动时会自动:
 - 同步 Role / Permission / RolePermission(来自 `app/rbac/permissions_config.py`)
-- 创建中建三局 BuyerOrganization(若不存在)
-- 创建 super admin(若不存在,`must_change_password=true`)
+- 创建 super admin(若不存在,`must_change_password=true`,**始终种入**)
+- 当 `SEED_DEMO_ACCOUNTS=true` 时,额外种入:
+  - 中建三局 BuyerOrganization(占位信用代码 `91420100MA4KXXXX01`)
+  - demo ADMIN `admin@platform.local` / OPERATOR `operator@platform.local`
+  - demo BUYER `buyer@cscec3b.local`(挂在中建三局下)
+
+### `SEED_DEMO_ACCOUNTS` 开关
+
+| 环境 | 取值 | 说明 |
+|---|---|---|
+| 本地开发 | `true`(推荐) | 一键拉起所有 demo 账号,方便逐角色体验 |
+| 生产部署 | `false`(**必须**) | 杜绝 demo 账号入网;super admin 仍会种入 |
+
+#### 误种了 demo 数据怎么清?
+
+部署到生产前若 `SEED_DEMO_ACCOUNTS` 曾被打开,手工清理 SQL:
+
+```sql
+DELETE FROM audit_logs WHERE user_email IN
+  ('admin@platform.local','operator@platform.local','buyer@cscec3b.local');
+DELETE FROM user_roles WHERE user_id IN (
+  SELECT id FROM users WHERE email IN
+    ('admin@platform.local','operator@platform.local','buyer@cscec3b.local')
+);
+DELETE FROM buyer_members WHERE user_id IN (
+  SELECT id FROM users WHERE email = 'buyer@cscec3b.local'
+);
+DELETE FROM users WHERE email IN
+  ('admin@platform.local','operator@platform.local','buyer@cscec3b.local');
+DELETE FROM buyer_organizations WHERE code = 'CSCEC3B';
+```
 
 ## 测试
 

@@ -25,9 +25,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Super admin 种子
+    # Super admin 种子(始终种入,生产唯一保留)
     SUPER_ADMIN_EMAIL: str = "superadmin@platform.local"
     SUPER_ADMIN_INITIAL_PASSWORD: str = "ChangeMe123"
+
+    # demo seed 开关:控制是否种入中建三局 BuyerOrg 与 admin/operator/buyer demo 账号
+    # 本地开发推荐 true;**生产部署务必 false**
+    SEED_DEMO_ACCOUNTS: bool = False
 
     # 日志
     LOG_LEVEL: str = "INFO"
