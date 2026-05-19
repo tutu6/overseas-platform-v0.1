@@ -22,6 +22,8 @@ os.environ.setdefault(
 )
 os.environ.setdefault("SUPER_ADMIN_EMAIL", "superadmin@platform.local")
 os.environ.setdefault("SUPER_ADMIN_INITIAL_PASSWORD", "ChangeMe123")
+# 测试默认开启 demo seed:大量已有用例依赖中建三局组织和 demo 账号
+os.environ.setdefault("SEED_DEMO_ACCOUNTS", "true")
 
 import asyncio  # noqa: E402
 from typing import AsyncGenerator  # noqa: E402

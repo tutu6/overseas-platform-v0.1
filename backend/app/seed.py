@@ -128,6 +128,67 @@ async def seed_demo_internal_accounts(db: AsyncSession) -> None:
     )
 
 
+async def seed_demo_buyer_account(db: AsyncSession) -> None:
+    """在中建三局 BuyerOrg 下创建 demo BUYER 账号 buyer@cscec3b.local。
+
+    依赖 seed_buyer_org 先行(取该组织的 id);幂等。
+    """
+    from app.db.models.buyer_member import BuyerMember
+
+    email = "buyer@cscec3b.local"
+    username = "buyer"
+
+    row = await db.execute(
+        select(User).where((User.email == email) | (User.username == username))
+    )
+    if row.scalar_one_or_none() is not None:
+        logger.info("Seed: demo buyer account %s already exists — kept as-is.", email)
+        return
+
+    org_row = await db.execute(
+        select(BuyerOrganization).where(BuyerOrganization.code == CSCEC3B_CODE)
+    )
+    org = org_row.scalar_one_or_none()
+    if org is None:
+        logger.error("Seed: 中建三局 BuyerOrg missing, did seed_buyer_org run first?")
+        return
+
+    role_row = await db.execute(select(Role).where(Role.code == RoleCode.BUYER))
+    role = role_row.scalar_one_or_none()
+    if role is None:
+        logger.error("Seed: BUYER role missing, did rbac sync run first?")
+        return
+
+    user = User(
+        email=email,
+        username=username,
+        name="演示采购员",
+        password_hash=hash_password("12345678a"),
+        status=UserStatus.ACTIVE,
+        must_change_password=False,
+    )
+    db.add(user)
+    await db.flush()
+    db.add(UserRole(user_id=user.id, role_id=role.id))
+    db.add(BuyerMember(user_id=user.id, buyer_org_id=org.id, is_owner=False))
+
+    await write_audit(
+        db,
+        resource_type=AuditResourceType.USER,
+        action=AuditAction.REGISTER,
+        user_id=user.id,
+        user_email=user.email,
+        resource_id=user.id,
+        extra={"reason": "seed_demo_buyer", "role": RoleCode.BUYER, "buyer_org_id": org.id},
+        commit=False,
+    )
+    await db.commit()
+    logger.warning(
+        "Seed: demo BUYER account created — email=%s. **仅用于开发演示,生产环境务必删除**",
+        email,
+    )
+
+
 async def seed_super_admin(db: AsyncSession) -> None:
     email = settings.SUPER_ADMIN_EMAIL
     row = await db.execute(select(User).where(User.email == email))
@@ -171,6 +232,19 @@ async def seed_super_admin(db: AsyncSession) -> None:
 
 
 async def run_all_seeds(db: AsyncSession) -> None:
-    await seed_buyer_org(db)
+    """启动种子总入口。
+
+    - super_admin:始终种入(生产唯一保留项)
+    - demo 内容(中建三局 / admin / operator / buyer demo 账号):
+      仅当 settings.SEED_DEMO_ACCOUNTS=true 时种入
+    """
     await seed_super_admin(db)
-    await seed_demo_internal_accounts(db)
+    if settings.SEED_DEMO_ACCOUNTS:
+        await seed_buyer_org(db)
+        await seed_demo_internal_accounts(db)
+        await seed_demo_buyer_account(db)
+    else:
+        logger.info(
+            "Seed: SEED_DEMO_ACCOUNTS=false → 跳过 demo 内容(中建三局组织 / "
+            "admin / operator / buyer demo 账号)"
+        )
