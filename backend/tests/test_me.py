@@ -112,8 +112,8 @@ async def test_change_email_wrong_password(client):
 
 @pytest.mark.asyncio
 async def test_change_email_conflict(client):
-    # 先注册第二个账号
-    other = {**REG_PAYLOAD, "email": "bob@cscec3b.com", "username": "bob"}
+    # 先注册第二个账号(phone 用不同号,避免撞 UNIQUE)
+    other = {**REG_PAYLOAD, "email": "bob@cscec3b.com", "username": "bob", "phone": "13900139001"}
     await client.post("/api/v1/auth/register/buyer", json=other)
 
     _, h = await _register_and_login(client)
@@ -190,7 +190,7 @@ async def test_change_username_wrong_password(client):
 
 @pytest.mark.asyncio
 async def test_change_username_conflict(client):
-    other = {**REG_PAYLOAD, "email": "bob@cscec3b.com", "username": "bob"}
+    other = {**REG_PAYLOAD, "email": "bob@cscec3b.com", "username": "bob", "phone": "13900139002"}
     await client.post("/api/v1/auth/register/buyer", json=other)
 
     _, h = await _register_and_login(client)

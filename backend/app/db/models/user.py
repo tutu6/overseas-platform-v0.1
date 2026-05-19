@@ -19,7 +19,8 @@ class User(Base, TimestampUpdateMixin):
     # 用户名:选填,UNIQUE,登录时可作为 email 的替代凭证
     username: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
-    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # 手机号:选填,UNIQUE,可作为登录凭证(中国大陆 11 位)
+    phone: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=UserStatus.ACTIVE)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
