@@ -223,7 +223,7 @@ async def register_supplier(
         )
     )
     if row.scalar_one_or_none() is not None:
-        raise ConflictError("营业执照号已存在")
+        raise ConflictError("该供应商已在平台注册。如需加入该企业,请联系企业管理员。")
 
     user = User(
         email=email,
