@@ -63,11 +63,22 @@ async def test_supplier_register_success(client):
 
 
 @pytest.mark.asyncio
-async def test_supplier_register_duplicate_license(client):
+async def test_supplier_register_duplicate_license(client, db_session):
+    """重复执照号 → 409 + 友好文案,且不残留任何新用户数据。"""
     await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
-    other = {**SUPPLIER_PAYLOAD, "email": "another@huajian.com"}
+    other = {**SUPPLIER_PAYLOAD, "email": "another@huajian.com", "phone": "13900139500"}
     r = await client.post("/api/v1/auth/register/supplier", json=other)
     assert r.status_code == 409
+
+    body = r.json()
+    assert "该供应商已在平台注册" in body["message"]
+    assert "联系企业管理员" in body["message"]
+
+    # 早 raise 不应残留 user / supplier_member / supplier_org 行
+    from sqlalchemy import select
+    from app.db.models.user import User
+    row = await db_session.execute(select(User).where(User.email == "another@huajian.com"))
+    assert row.scalar_one_or_none() is None
 
 
 @pytest.mark.asyncio
