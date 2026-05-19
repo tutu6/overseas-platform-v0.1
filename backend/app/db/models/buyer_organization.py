@@ -17,5 +17,9 @@ class BuyerOrganization(Base, TimestampUpdateMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     code: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
+    # 统一社会信用代码:18 位大写字母 + 数字,采购方注册时按此识别企业
+    unified_social_credit_code: Mapped[str | None] = mapped_column(
+        String(18), unique=True, nullable=True, index=True
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=BuyerOrgStatus.ACTIVE)

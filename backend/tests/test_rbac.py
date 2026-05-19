@@ -37,7 +37,8 @@ async def _register_supplier(client, email="supplier1@huajian.com", license_no="
     payload = {
         "email": email,
         "name": "Supplier 1",
-        "phone": "13800138000",
+        # 与 BUYER fixture(13800138000)区分,避免撞 phone UNIQUE
+        "phone": "13900139000",
         "password": "Abcd1234",
         "company_name": "Huajian Co",
         "business_license_no": license_no,
