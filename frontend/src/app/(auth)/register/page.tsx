@@ -16,16 +16,28 @@ import {
 import { Label } from "@/components/ui/label";
 import { authApi } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import {
+  validateEmail,
+  validatePassword,
+  validatePasswordConfirm,
+  validatePhoneOptional,
+  validateRequired,
+  validateUsc,
+  validateUsernameOptional,
+} from "@/lib/validators";
 
 type Role = "BUYER" | "SUPPLIER" | "";
 
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_\-]{8,32}$/;
-// 用户名:3-50 位字母/数字/下划线/短横,且不能纯数字(与后端 USERNAME_REGEX 等价)
-const USERNAME_REGEX = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
-// 统一社会信用代码:严格 18 位大写字母+数字(与后端 USC_REGEX 等价)
-const USC_REGEX = /^[0-9A-Z]{18}$/;
-// 中国大陆 11 位手机号(与后端 PHONE_REGEX 等价)
-const PHONE_REGEX = /^1[3-9]\d{9}$/;
+type FieldName =
+  | "name"
+  | "email"
+  | "username"
+  | "phone"
+  | "password"
+  | "confirmPassword"
+  | "companyName"
+  | "unifiedSocialCreditCode"
+  | "businessLicenseNo";
 
 interface FormState {
   name: string;
@@ -51,52 +63,108 @@ const initialForm: FormState = {
   businessLicenseNo: "",
 };
 
+const INPUT_BASE =
+  "h-11 w-full rounded-lg border bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:outline-none focus:ring-2";
+const INPUT_OK_BUYER =
+  "border-gray-200 focus:border-[#003366] focus:ring-[#003366]/15";
+const INPUT_OK_SUPPLIER =
+  "border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]/15";
+const INPUT_ERR =
+  "border-red-400 focus:border-red-500 focus:ring-red-500/15";
+
+function inputCls(role: Role, error: string | null, extra = ""): string {
+  const base = error
+    ? INPUT_ERR
+    : role === "BUYER"
+    ? INPUT_OK_BUYER
+    : INPUT_OK_SUPPLIER;
+  return `${INPUT_BASE} ${base} ${extra}`;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [role, setRole] = useState<Role>("");
   const [form, setForm] = useState<FormState>(initialForm);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [error, setError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Partial<Record<FieldName, string | null>>>({});
+  const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({});
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  /** 根据字段名跑对应的校验器。companyName / businessLicenseNo 仅在对应角色下校验。 */
+  const validateField = (field: FieldName, value: string, pwd?: string): string | null => {
+    switch (field) {
+      case "name":
+        return validateRequired(value, "姓名");
+      case "email":
+        return validateEmail(value);
+      case "username":
+        return validateUsernameOptional(value);
+      case "phone":
+        return validatePhoneOptional(value);
+      case "password":
+        return validatePassword(value);
+      case "confirmPassword":
+        return validatePasswordConfirm(pwd ?? form.password, value);
+      case "companyName":
+        return validateRequired(value, "公司名称");
+      case "unifiedSocialCreditCode":
+        return validateUsc(value);
+      case "businessLicenseNo":
+        return validateRequired(value, "营业执照号");
+    }
   };
 
-  const validate = (): string => {
+  const setField = (field: FieldName, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    // 用户继续输入,清掉该字段错误(下次 blur 再算)
+    if (errors[field]) {
+      setErrors((e) => ({ ...e, [field]: null }));
+    }
+    // password 改了,顺手清 confirmPassword 的错(避免红字滞留)
+    if (field === "password" && errors.confirmPassword) {
+      setErrors((e) => ({ ...e, confirmPassword: null }));
+    }
+  };
+
+  const handleBlur = (field: FieldName) => {
+    setTouched((t) => ({ ...t, [field]: true }));
+    setErrors((e) => ({ ...e, [field]: validateField(field, form[field]) }));
+  };
+
+  const errOf = (field: FieldName): string | null =>
+    touched[field] ? errors[field] ?? null : null;
+
+  /** 提交时跑全量校验,把所有相关字段标为 touched + 错误。第一个错误用作顶部 banner。 */
+  const validateAll = (): string => {
     if (!role) return "请选择注册角色";
-    if (!form.name.trim()) return "请填写姓名";
-    if (!form.email.trim()) return "请填写邮箱";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "请填写有效的邮箱地址";
-    if (form.username && !USERNAME_REGEX.test(form.username))
-      return "用户名 3-50 位,只能含字母/数字/下划线/短横,且不能纯数字";
-    if (form.phone && !PHONE_REGEX.test(form.phone))
-      return "手机号须为 11 位中国大陆号码(1 开头,第二位 3-9)";
-    if (!form.password) return "请填写密码";
-    if (!PASSWORD_REGEX.test(form.password)) return "密码 8-32 位,且至少包含 1 个字母和 1 个数字";
-    if (form.password !== form.confirmPassword) return "两次输入的密码不一致";
-    if (role === "BUYER") {
-      if (!form.companyName.trim()) return "请填写公司名称";
-      if (!form.unifiedSocialCreditCode.trim()) return "请填写统一社会信用代码";
-      if (!USC_REGEX.test(form.unifiedSocialCreditCode))
-        return "统一社会信用代码须为 18 位大写字母与数字";
+    const fields: FieldName[] = ["name", "email", "username", "phone", "password", "confirmPassword"];
+    if (role === "BUYER") fields.push("companyName", "unifiedSocialCreditCode");
+    if (role === "SUPPLIER") fields.push("companyName", "businessLicenseNo");
+
+    const newErrors: Partial<Record<FieldName, string | null>> = {};
+    const newTouched: Partial<Record<FieldName, boolean>> = {};
+    let firstError = "";
+    for (const f of fields) {
+      const err = validateField(f, form[f]);
+      newTouched[f] = true;
+      newErrors[f] = err;
+      if (err && !firstError) firstError = err;
     }
-    if (role === "SUPPLIER") {
-      if (!form.companyName.trim()) return "请填写公司名称";
-      if (!form.businessLicenseNo.trim()) return "请填写营业执照号";
-    }
-    return "";
+    setTouched((t) => ({ ...t, ...newTouched }));
+    setErrors((e) => ({ ...e, ...newErrors }));
+    return firstError;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const v = validate();
+    const v = validateAll();
     if (v) {
-      setError(v);
+      setSubmitError(v);
       return;
     }
-    setError("");
+    setSubmitError("");
     setLoading(true);
     try {
       if (role === "BUYER") {
@@ -120,9 +188,23 @@ export default function RegisterPage() {
           business_license_no: form.businessLicenseNo,
         });
       }
+      // 把刚注册的凭证(优先用户名 > 手机号 > 邮箱)写入 sessionStorage,
+      // /login 页 mount 时一次性消费并清掉。
+      // 不走 URL:避免密码进浏览器历史/服务器日志/Referer。
+      try {
+        sessionStorage.setItem(
+          "prefill_login",
+          JSON.stringify({
+            identifier: form.username || form.phone || form.email,
+            password: form.password,
+          })
+        );
+      } catch {
+        // sessionStorage 可能在隐私模式被禁用;忽略,降级到无自动填充
+      }
       router.replace("/login?registered=1");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "注册失败,请稍后重试");
+      setSubmitError(err instanceof ApiError ? err.message : "注册失败,请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -209,7 +291,9 @@ export default function RegisterPage() {
               type="button"
               onClick={() => {
                 setRole("");
-                setError("");
+                setSubmitError("");
+                setErrors({});
+                setTouched({});
               }}
               className="ml-auto text-xs text-gray-400 underline hover:text-gray-600"
             >
@@ -217,160 +301,115 @@ export default function RegisterPage() {
             </button>
           </div>
 
-          {error && (
+          {submitError && (
             <div className="mb-5 flex items-center gap-2.5 rounded-lg border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{error}</span>
+              <span>{submitError}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-sm font-semibold text-gray-700">
-                  姓名 *
-                </Label>
-                <input
-                  id="name"
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  placeholder="您的姓名"
-                  required
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone" className="text-sm font-semibold text-gray-700">
-                  手机号 <span className="font-normal text-gray-400">(选填,可作登录凭证)</span>
-                </Label>
-                <input
-                  id="phone"
-                  name="phone"
-                  inputMode="numeric"
-                  value={form.phone}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      phone: e.target.value.replace(/\D/g, "").slice(0, 11),
-                    }))
-                  }
-                  placeholder="11 位"
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
-                />
-                {form.phone && !PHONE_REGEX.test(form.phone) && (
-                  <p className="text-xs text-red-500">手机号须为 11 位中国大陆号码</p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-semibold text-gray-700">
-                邮箱地址 *
-              </Label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="your@email.com"
-                autoComplete="email"
-                required
-                className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="username" className="text-sm font-semibold text-gray-700">
-                用户名 <span className="font-normal text-gray-400">(选填,3-50 位,字母/数字/下划线/短横;用于代替邮箱登录)</span>
-              </Label>
-              <input
-                id="username"
-                name="username"
-                value={form.username}
-                onChange={handleChange}
-                placeholder="如 zhang_san"
-                autoComplete="username"
-                className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
-              />
-            </div>
-
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {/* 公司信息 — 放在最上面,先识别组织再填个人信息 */}
             {role === "SUPPLIER" && (
               <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="companyName" className="text-sm font-semibold text-gray-700">
-                    公司名称 *
-                  </Label>
-                  <input
-                    id="companyName"
-                    name="companyName"
-                    value={form.companyName}
-                    onChange={handleChange}
-                    placeholder="请填写完整公司名称"
-                    required
-                    className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="businessLicenseNo" className="text-sm font-semibold text-gray-700">
-                    营业执照号 *
-                  </Label>
-                  <input
-                    id="businessLicenseNo"
-                    name="businessLicenseNo"
-                    value={form.businessLicenseNo}
-                    onChange={handleChange}
-                    placeholder="统一社会信用代码"
-                    required
-                    className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
-                  />
-                </div>
+                <Field
+                  id="companyName" label="公司名称" required
+                  value={form.companyName}
+                  onChange={(v) => setField("companyName", v)}
+                  onBlur={() => handleBlur("companyName")}
+                  error={errOf("companyName")}
+                  placeholder="请填写完整公司名称"
+                  role={role}
+                />
+                <Field
+                  id="businessLicenseNo" label="营业执照号" required
+                  value={form.businessLicenseNo}
+                  onChange={(v) => setField("businessLicenseNo", v)}
+                  onBlur={() => handleBlur("businessLicenseNo")}
+                  error={errOf("businessLicenseNo")}
+                  placeholder="统一社会信用代码"
+                  role={role}
+                />
               </>
             )}
 
             {role === "BUYER" && (
               <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="companyName" className="text-sm font-semibold text-gray-700">
-                    公司名称 *
-                  </Label>
-                  <input
-                    id="companyName"
-                    name="companyName"
-                    value={form.companyName}
-                    onChange={handleChange}
-                    placeholder="请填写完整公司名称"
-                    required
-                    className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#003366] focus:outline-none focus:ring-2 focus:ring-[#003366]/15"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="unifiedSocialCreditCode" className="text-sm font-semibold text-gray-700">
-                    统一社会信用代码 * <span className="font-normal text-gray-400">(18 位大写字母与数字)</span>
-                  </Label>
-                  <input
-                    id="unifiedSocialCreditCode"
-                    name="unifiedSocialCreditCode"
-                    value={form.unifiedSocialCreditCode}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        unifiedSocialCreditCode: e.target.value.toUpperCase().slice(0, 18),
-                      }))
-                    }
-                    placeholder="如 91110000XXXXXXXXX1"
-                    required
-                    maxLength={18}
-                    className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm uppercase text-gray-800 placeholder-gray-400 transition-all focus:border-[#003366] focus:outline-none focus:ring-2 focus:ring-[#003366]/15"
-                  />
-                  <p className="text-xs text-gray-400">
-                    系统按信用代码识别企业:首次填写将创建新组织,与已有组织信用代码相同则自动加入。
-                  </p>
-                </div>
+                <Field
+                  id="companyName" label="公司名称" required
+                  value={form.companyName}
+                  onChange={(v) => setField("companyName", v)}
+                  onBlur={() => handleBlur("companyName")}
+                  error={errOf("companyName")}
+                  placeholder="请填写完整公司名称"
+                  role={role}
+                />
+                <Field
+                  id="unifiedSocialCreditCode" label="统一社会信用代码" required
+                  hint="(18 位大写字母与数字)"
+                  value={form.unifiedSocialCreditCode}
+                  onChange={(v) =>
+                    setField("unifiedSocialCreditCode", v.toUpperCase().slice(0, 18))
+                  }
+                  onBlur={() => handleBlur("unifiedSocialCreditCode")}
+                  error={errOf("unifiedSocialCreditCode")}
+                  placeholder="如 91110000XXXXXXXXX1"
+                  maxLength={18}
+                  extraInputClass="uppercase"
+                  role={role}
+                  footnote="系统按信用代码识别企业:首次填写将创建新组织,与已有组织信用代码相同则自动加入。"
+                />
               </>
             )}
 
+            {/* 个人信息 */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field
+                id="name" label="姓名" required
+                value={form.name}
+                onChange={(v) => setField("name", v)}
+                onBlur={() => handleBlur("name")}
+                error={errOf("name")}
+                placeholder="您的姓名"
+                role={role}
+              />
+              <Field
+                id="phone" label="手机号"
+                hint="(选填,可作登录凭证)"
+                value={form.phone}
+                onChange={(v) => setField("phone", v.replace(/\D/g, "").slice(0, 11))}
+                onBlur={() => handleBlur("phone")}
+                error={errOf("phone")}
+                placeholder="11 位"
+                inputMode="numeric"
+                role={role}
+              />
+            </div>
+
+            <Field
+              id="email" label="邮箱地址" required type="email"
+              value={form.email}
+              onChange={(v) => setField("email", v)}
+              onBlur={() => handleBlur("email")}
+              error={errOf("email")}
+              placeholder="your@email.com"
+              autoComplete="email"
+              role={role}
+            />
+
+            <Field
+              id="username" label="用户名"
+              hint="(选填,3-50 位字母/数字/下划线/短横;用于代替邮箱登录)"
+              value={form.username}
+              onChange={(v) => setField("username", v)}
+              onBlur={() => handleBlur("username")}
+              error={errOf("username")}
+              placeholder="如 zhang_san"
+              autoComplete="username"
+              role={role}
+            />
+
+            {/* 密码 */}
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-semibold text-gray-700">
                 密码 * <span className="font-normal text-gray-400">(8-32 位,含字母与数字)</span>
@@ -381,11 +420,11 @@ export default function RegisterPage() {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   value={form.password}
-                  onChange={handleChange}
+                  onChange={(e) => setField("password", e.target.value)}
+                  onBlur={() => handleBlur("password")}
                   placeholder="请输入密码"
-                  required
                   autoComplete="new-password"
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 pr-12 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
+                  className={inputCls(role, errOf("password"), "pr-12")}
                 />
                 <button
                   type="button"
@@ -396,8 +435,10 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {errOf("password") && <p className="text-xs text-red-500">{errOf("password")}</p>}
             </div>
 
+            {/* 确认密码 */}
             <div className="space-y-1.5">
               <Label htmlFor="confirmPassword" className="text-sm font-semibold text-gray-700">
                 确认密码 *
@@ -408,11 +449,11 @@ export default function RegisterPage() {
                   name="confirmPassword"
                   type={showConfirm ? "text" : "password"}
                   value={form.confirmPassword}
-                  onChange={handleChange}
+                  onChange={(e) => setField("confirmPassword", e.target.value)}
+                  onBlur={() => handleBlur("confirmPassword")}
                   placeholder="再次输入密码"
-                  required
                   autoComplete="new-password"
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 pr-12 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
+                  className={inputCls(role, errOf("confirmPassword"), "pr-12")}
                 />
                 <button
                   type="button"
@@ -423,15 +464,18 @@ export default function RegisterPage() {
                   {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {form.confirmPassword && form.password !== form.confirmPassword && (
+              {errOf("confirmPassword") ? (
                 <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
-                  <AlertCircle className="h-3 w-3" /> 两次密码不一致
+                  <AlertCircle className="h-3 w-3" /> {errOf("confirmPassword")}
                 </p>
-              )}
-              {form.confirmPassword && form.password && form.password === form.confirmPassword && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-[#10B981]">
-                  <CheckCircle2 className="h-3 w-3" /> 密码匹配
-                </p>
+              ) : (
+                form.confirmPassword &&
+                form.password &&
+                form.password === form.confirmPassword && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-[#10B981]">
+                    <CheckCircle2 className="h-3 w-3" /> 密码匹配
+                  </p>
+                )
               )}
             </div>
 
@@ -475,5 +519,56 @@ export default function RegisterPage() {
         </Link>
       </div>
     </>
+  );
+}
+
+interface FieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur: () => void;
+  error: string | null;
+  required?: boolean;
+  hint?: string;
+  footnote?: string;
+  placeholder?: string;
+  type?: string;
+  autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
+  extraInputClass?: string;
+  role: Role;
+}
+
+function Field({
+  id, label, value, onChange, onBlur, error, required, hint, footnote,
+  placeholder, type = "text", autoComplete, inputMode, maxLength, extraInputClass = "", role,
+}: FieldProps) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-sm font-semibold text-gray-700">
+        {label}{required && " *"}
+        {hint && <span className="ml-1 font-normal text-gray-400">{hint}</span>}
+      </Label>
+      <input
+        id={id}
+        name={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        className={inputCls(role, error, extraInputClass)}
+      />
+      {error ? (
+        <p className="text-xs text-red-500">{error}</p>
+      ) : (
+        footnote && <p className="text-xs text-gray-400">{footnote}</p>
+      )}
+    </div>
   );
 }

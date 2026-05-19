@@ -7,10 +7,14 @@ import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { adminUsersApi, type AdminUserOut, type InternalRole } from "@/lib/adminUsers";
 import { Permissions } from "@/lib/permissions";
+import {
+  validateEmail,
+  validatePassword,
+  validateRequired,
+  validateUsernameOptional,
+} from "@/lib/validators";
 
 const PAGE_SIZE = 20;
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_\-]{8,32}$/;
-const USERNAME_REGEX = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
 
 function Inner() {
   const [items, setItems] = useState<AdminUserOut[]>([]);
@@ -256,13 +260,39 @@ function CreateModal({
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
 
+  type Field = "email" | "username" | "name" | "password";
+  const [fieldErr, setFieldErr] = useState<Partial<Record<Field, string | null>>>({});
+
+  const valueOf = (f: Field): string =>
+    ({ email, username, name, password }[f]);
+
+  const runValidator = (f: Field, v: string): string | null => {
+    switch (f) {
+      case "email": return validateEmail(v);
+      case "username": return validateUsernameOptional(v);
+      case "name": return validateRequired(v, "姓名");
+      case "password": return validatePassword(v);
+    }
+  };
+
+  const blurOf = (f: Field) => () =>
+    setFieldErr((s) => ({ ...s, [f]: runValidator(f, valueOf(f)) }));
+
+  const clear = (f: Field) => {
+    if (fieldErr[f]) setFieldErr((s) => ({ ...s, [f]: null }));
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setErr("请填写有效邮箱");
-    if (username && !USERNAME_REGEX.test(username))
-      return setErr("用户名 3-50 位,字母/数字/下划线/短横,不能纯数字");
-    if (!name.trim()) return setErr("姓名不能为空");
-    if (!PASSWORD_REGEX.test(password)) return setErr("密码 8-32 位,至少 1 字母 + 1 数字");
+    const all: Partial<Record<Field, string | null>> = {
+      email: validateEmail(email),
+      username: validateUsernameOptional(username),
+      name: validateRequired(name, "姓名"),
+      password: validatePassword(password),
+    };
+    setFieldErr(all);
+    const first = (Object.values(all).find((x) => x) as string | undefined) ?? "";
+    if (first) return setErr(first);
     setErr("");
     setSubmitting(true);
     try {
@@ -296,44 +326,52 @@ function CreateModal({
             <AlertCircle className="h-4 w-4" /> {err}
           </div>
         )}
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-3" noValidate>
           <Field id="email" label="邮箱 *">
             <input
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className={inputCls}
+              onChange={(e) => { setEmail(e.target.value); clear("email"); }}
+              onBlur={blurOf("email")}
+              className={inputCls(!!fieldErr.email)}
             />
+            {fieldErr.email && <p className="mt-1 text-xs text-red-500">{fieldErr.email}</p>}
           </Field>
           <Field id="username" label="用户名(选填)">
             <input
               id="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className={inputCls}
+              onChange={(e) => { setUsername(e.target.value); clear("username"); }}
+              onBlur={blurOf("username")}
+              className={inputCls(!!fieldErr.username)}
             />
+            {fieldErr.username && <p className="mt-1 text-xs text-red-500">{fieldErr.username}</p>}
           </Field>
           <Field id="name" label="姓名 *">
             <input
               id="name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className={inputCls}
+              onChange={(e) => { setName(e.target.value); clear("name"); }}
+              onBlur={blurOf("name")}
+              className={inputCls(!!fieldErr.name)}
             />
+            {fieldErr.name && <p className="mt-1 text-xs text-red-500">{fieldErr.name}</p>}
           </Field>
           <Field id="password" label="初始密码 *">
             <input
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className={inputCls}
+              onChange={(e) => { setPassword(e.target.value); clear("password"); }}
+              onBlur={blurOf("password")}
+              className={inputCls(!!fieldErr.password)}
             />
-            <p className="mt-1 text-xs text-slate-400">8-32 位,至少 1 字母 + 1 数字</p>
+            {fieldErr.password ? (
+              <p className="mt-1 text-xs text-red-500">{fieldErr.password}</p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-400">8-32 位,至少 1 字母 + 1 数字</p>
+            )}
           </Field>
           <Field id="role" label="角色 *">
             <div className="flex gap-3">
@@ -382,8 +420,13 @@ function CreateModal({
   );
 }
 
-const inputCls =
-  "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder-slate-400 focus:border-[#003366] focus:outline-none focus:ring-2 focus:ring-[#003366]/15";
+function inputCls(hasError: boolean): string {
+  const base =
+    "h-10 w-full rounded-lg border bg-white px-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2";
+  return hasError
+    ? `${base} border-red-400 focus:border-red-500 focus:ring-red-500/15`
+    : `${base} border-slate-200 focus:border-[#003366] focus:ring-[#003366]/15`;
+}
 
 function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (

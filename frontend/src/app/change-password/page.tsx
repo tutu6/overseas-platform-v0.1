@@ -9,8 +9,7 @@ import { authApi } from "@/lib/auth";
 import { defaultDashboardOf } from "@/config/navigation";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
-
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_\-]{8,32}$/;
+import { validatePassword, validatePasswordConfirm } from "@/lib/validators";
 
 function Inner() {
   const router = useRouter();
@@ -24,12 +23,20 @@ function Inner() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [oldErr, setOldErr] = useState<string | null>(null);
+  const [newErr, setNewErr] = useState<string | null>(null);
+  const [confirmErr, setConfirmErr] = useState<string | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!oldPwd) return setError("请输入旧密码");
-    if (!PASSWORD_REGEX.test(newPwd)) return setError("新密码 8-32 位,至少含 1 字母 1 数字");
-    if (newPwd !== confirm) return setError("两次输入的新密码不一致");
+    const oe = oldPwd ? null : "请输入旧密码";
+    const ne = validatePassword(newPwd);
+    const ce = validatePasswordConfirm(newPwd, confirm);
+    setOldErr(oe);
+    setNewErr(ne);
+    setConfirmErr(ce);
+    const first = oe ?? ne ?? ce;
+    if (first) return setError(first);
     setError("");
     setSubmitting(true);
     try {
@@ -44,8 +51,7 @@ function Inner() {
     }
   };
 
-  const matchOk = confirm.length > 0 && newPwd === confirm;
-  const matchBad = confirm.length > 0 && newPwd !== confirm;
+  const matchOk = confirm.length > 0 && newPwd === confirm && !confirmErr;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#003366] to-[#0F4C81] p-4">
@@ -70,12 +76,14 @@ function Inner() {
             </div>
           )}
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4" noValidate>
             <PwdField
               id="oldPwd"
               label="旧密码"
               value={oldPwd}
-              onChange={setOldPwd}
+              onChange={(v) => { setOldPwd(v); if (oldErr) setOldErr(null); }}
+              onBlur={() => setOldErr(oldPwd ? null : "请输入旧密码")}
+              error={oldErr}
               show={showOld}
               onToggle={() => setShowOld(!showOld)}
             />
@@ -84,7 +92,13 @@ function Inner() {
               label="新密码"
               hint="8-32 位,含字母与数字"
               value={newPwd}
-              onChange={setNewPwd}
+              onChange={(v) => {
+                setNewPwd(v);
+                if (newErr) setNewErr(null);
+                if (confirmErr) setConfirmErr(null);
+              }}
+              onBlur={() => setNewErr(validatePassword(newPwd))}
+              error={newErr}
               show={showNew}
               onToggle={() => setShowNew(!showNew)}
             />
@@ -93,16 +107,13 @@ function Inner() {
                 id="confirm"
                 label="确认新密码"
                 value={confirm}
-                onChange={setConfirm}
+                onChange={(v) => { setConfirm(v); if (confirmErr) setConfirmErr(null); }}
+                onBlur={() => setConfirmErr(validatePasswordConfirm(newPwd, confirm))}
+                error={confirmErr}
                 show={showConfirm}
                 onToggle={() => setShowConfirm(!showConfirm)}
               />
-              {matchBad && (
-                <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
-                  <AlertCircle className="h-3 w-3" /> 两次密码不一致
-                </p>
-              )}
-              {matchOk && (
+              {!confirmErr && matchOk && (
                 <p className="mt-1 flex items-center gap-1 text-xs text-[#10B981]">
                   <CheckCircle2 className="h-3 w-3" /> 密码匹配
                 </p>
@@ -136,6 +147,8 @@ function PwdField({
   hint,
   value,
   onChange,
+  onBlur,
+  error,
   show,
   onToggle,
 }: {
@@ -144,9 +157,16 @@ function PwdField({
   hint?: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
+  error?: string | null;
   show: boolean;
   onToggle: () => void;
 }) {
+  const base =
+    "h-11 w-full rounded-lg border bg-white px-3 pr-12 text-sm text-gray-800 placeholder-gray-400 transition-all focus:outline-none focus:ring-2";
+  const tone = error
+    ? "border-red-400 focus:border-red-500 focus:ring-red-500/15"
+    : "border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]/15";
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-sm font-semibold text-gray-700">
@@ -158,8 +178,8 @@ function PwdField({
           type={show ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          required
-          className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 pr-12 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
+          onBlur={onBlur}
+          className={`${base} ${tone}`}
         />
         <button
           type="button"
@@ -170,6 +190,11 @@ function PwdField({
           {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
       </div>
+      {error && (
+        <p className="mt-1 flex items-center gap-1 text-xs text-red-500">
+          <AlertCircle className="h-3 w-3" /> {error}
+        </p>
+      )}
     </div>
   );
 }

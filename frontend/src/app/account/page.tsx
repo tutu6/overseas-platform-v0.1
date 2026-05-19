@@ -19,8 +19,11 @@ import { authApi } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 
-const USERNAME_REGEX = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
-const PHONE_REGEX = /^1[3-9]\d{9}$/;
+import {
+  validateEmail,
+  validatePhoneOptional,
+  validateUsernameOptional,
+} from "@/lib/validators";
 
 function Inner() {
   const user = useAuthStore((s) => s.user);
@@ -106,16 +109,21 @@ function Alert({ kind, children }: { kind: "error" | "success"; children: React.
   );
 }
 
-function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={
-        "h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15 " +
-        (props.className ?? "")
-      }
-    />
-  );
+interface TextInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  hasError?: boolean;
+}
+
+function TextInput({ hasError, className, ...rest }: TextInputProps) {
+  const base =
+    "h-11 w-full rounded-lg border bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:outline-none focus:ring-2";
+  const tone = hasError
+    ? "border-red-400 focus:border-red-500 focus:ring-red-500/15"
+    : "border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]/15";
+  return <input {...rest} className={`${base} ${tone} ${className ?? ""}`} />;
+}
+
+function FieldError({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-red-500">{children}</p>;
 }
 
 function PasswordInput({
@@ -174,13 +182,16 @@ function ProfileCard({
   onSaved: (u: { name: string }) => void;
 }) {
   const [name, setName] = useState(initialName);
+  const [nameErr, setNameErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return setError("姓名不能为空");
+    const err = name.trim() ? null : "姓名不能为空";
+    setNameErr(err);
+    if (err) return setError(err);
     setError("");
     setSuccess("");
     setSubmitting(true);
@@ -199,10 +210,17 @@ function ProfileCard({
     <SectionCard icon={UserRound} title="基础资料" desc="姓名(无需密码)">
       {error && <Alert kind="error">{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="name" className="text-sm font-semibold text-gray-700">姓名 *</Label>
-          <TextInput id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <TextInput
+            id="name"
+            value={name}
+            onChange={(e) => { setName(e.target.value); if (nameErr) setNameErr(null); }}
+            onBlur={() => setNameErr(name.trim() ? null : "姓名不能为空")}
+            hasError={!!nameErr}
+          />
+          {nameErr && <FieldError>{nameErr}</FieldError>}
         </div>
         <SubmitButton submitting={submitting}>保存</SubmitButton>
       </form>
@@ -218,6 +236,7 @@ function PhoneCard({
   onSaved: (u: { phone: string | null }) => void;
 }) {
   const [newPhone, setNewPhone] = useState(currentPhone ?? "");
+  const [phoneErr, setPhoneErr] = useState<string | null>(null);
   const [pwd, setPwd] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -228,8 +247,9 @@ function PhoneCard({
     e.preventDefault();
     const trimmed = newPhone.trim();
     const target = trimmed === "" ? null : trimmed;
-    if (target && !PHONE_REGEX.test(target))
-      return setError("手机号须为 11 位中国大陆号码(1 开头,第二位 3-9)");
+    const fmtErr = validatePhoneOptional(trimmed);
+    setPhoneErr(fmtErr);
+    if (fmtErr) return setError(fmtErr);
     if (target === (currentPhone ?? null)) return setError("新手机号与当前一致");
     if (!pwd) return setError("请输入当前密码");
     setError("");
@@ -263,7 +283,7 @@ function PhoneCard({
     >
       {error && <Alert kind="error">{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="newPhone" className="text-sm font-semibold text-gray-700">
             新手机号 <span className="font-normal text-gray-400">(留空 = 清除)</span>
@@ -272,9 +292,15 @@ function PhoneCard({
             id="newPhone"
             inputMode="numeric"
             value={newPhone}
-            onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
+            onChange={(e) => {
+              setNewPhone(e.target.value.replace(/\D/g, "").slice(0, 11));
+              if (phoneErr) setPhoneErr(null);
+            }}
+            onBlur={() => setPhoneErr(validatePhoneOptional(newPhone))}
             placeholder="11 位"
+            hasError={!!phoneErr}
           />
+          {phoneErr && <FieldError>{phoneErr}</FieldError>}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="phonePwd" className="text-sm font-semibold text-gray-700">当前密码</Label>
@@ -301,6 +327,7 @@ function EmailCard({
   onSaved: (u: { email: string }) => void;
 }) {
   const [newEmail, setNewEmail] = useState("");
+  const [emailErr, setEmailErr] = useState<string | null>(null);
   const [pwd, setPwd] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -309,7 +336,9 @@ function EmailCard({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) return setError("请输入有效邮箱");
+    const fmtErr = validateEmail(newEmail);
+    setEmailErr(fmtErr);
+    if (fmtErr) return setError(fmtErr);
     if (newEmail === currentEmail) return setError("新邮箱与当前一致");
     if (!pwd) return setError("请输入当前密码");
     setError("");
@@ -340,17 +369,20 @@ function EmailCard({
     >
       {error && <Alert kind="error">{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="newEmail" className="text-sm font-semibold text-gray-700">新邮箱</Label>
           <TextInput
             id="newEmail"
             type="email"
             value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
+            onChange={(e) => { setNewEmail(e.target.value); if (emailErr) setEmailErr(null); }}
+            onBlur={() => setEmailErr(validateEmail(newEmail))}
             placeholder="new@email.com"
             autoComplete="email"
+            hasError={!!emailErr}
           />
+          {emailErr && <FieldError>{emailErr}</FieldError>}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="emailPwd" className="text-sm font-semibold text-gray-700">当前密码</Label>
@@ -377,6 +409,7 @@ function UsernameCard({
   onSaved: (u: { username: string | null }) => void;
 }) {
   const [newUsername, setNewUsername] = useState(currentUsername ?? "");
+  const [unameErr, setUnameErr] = useState<string | null>(null);
   const [pwd, setPwd] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -387,8 +420,9 @@ function UsernameCard({
     e.preventDefault();
     const trimmed = newUsername.trim();
     const target = trimmed === "" ? null : trimmed;
-    if (target && !USERNAME_REGEX.test(target))
-      return setError("用户名 3-50 位,只能含字母/数字/下划线/短横,且不能纯数字");
+    const fmtErr = validateUsernameOptional(trimmed);
+    setUnameErr(fmtErr);
+    if (fmtErr) return setError(fmtErr);
     if (target === (currentUsername ?? null)) return setError("新用户名与当前一致");
     if (!pwd) return setError("请输入当前密码");
     setError("");
@@ -418,7 +452,7 @@ function UsernameCard({
     >
       {error && <Alert kind="error">{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="newUsername" className="text-sm font-semibold text-gray-700">
             新用户名 <span className="font-normal text-gray-400">(留空 = 清除)</span>
@@ -426,9 +460,12 @@ function UsernameCard({
           <TextInput
             id="newUsername"
             value={newUsername}
-            onChange={(e) => setNewUsername(e.target.value)}
+            onChange={(e) => { setNewUsername(e.target.value); if (unameErr) setUnameErr(null); }}
+            onBlur={() => setUnameErr(validateUsernameOptional(newUsername.trim()))}
             placeholder="如 zhang_san"
+            hasError={!!unameErr}
           />
+          {unameErr && <FieldError>{unameErr}</FieldError>}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="unamePwd" className="text-sm font-semibold text-gray-700">当前密码</Label>
