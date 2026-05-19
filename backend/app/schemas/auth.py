@@ -76,8 +76,9 @@ class LoginIn(BaseModel):
 
 
 class TokenOut(BaseModel):
+    """登录响应。refresh_token **不在 body**,通过 httpOnly cookie 下发。"""
+
     access_token: str
-    refresh_token: str
     token_type: str = "Bearer"
     expires_in: int
 
