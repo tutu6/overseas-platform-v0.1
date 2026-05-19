@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
@@ -16,12 +16,32 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [idErr, setIdErr] = useState<string | null>(null);
+  const [pwdErr, setPwdErr] = useState<string | null>(null);
   const login = useLogin();
+
+  // 注册成功跳转过来时,自动填充刚才提交的凭证(sessionStorage,一次性消费)
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("prefill_login");
+      if (!raw) return;
+      sessionStorage.removeItem("prefill_login");
+      const data = JSON.parse(raw) as { identifier?: string; password?: string };
+      if (data.identifier) setIdentifier(data.identifier);
+      if (data.password) setPassword(data.password);
+    } catch {
+      // JSON 解析失败或 sessionStorage 不可用 → 静默忽略,正常空白登录
+    }
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identifier || !password) {
-      setError("请填写邮箱 / 用户名 / 手机号和密码");
+    const ie = identifier ? null : "请填写邮箱 / 用户名 / 手机号";
+    const pe = password ? null : "请填写密码";
+    setIdErr(ie);
+    setPwdErr(pe);
+    if (ie || pe) {
+      setError(ie ?? pe);
       return;
     }
     setError(null);
@@ -66,7 +86,7 @@ function LoginContent() {
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="identifier" className="text-sm font-semibold text-gray-700">
             邮箱 / 用户名 / 手机号
@@ -75,12 +95,18 @@ function LoginContent() {
             id="identifier"
             type="text"
             value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
+            onChange={(e) => { setIdentifier(e.target.value); if (idErr) setIdErr(null); }}
+            onBlur={() => setIdErr(identifier ? null : "请填写邮箱 / 用户名 / 手机号")}
             placeholder="输入邮箱、用户名或 11 位手机号"
             autoComplete="username"
-            required
-            className="w-full h-12 px-4 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#FF6B35] focus:ring-2 focus:ring-[#FF6B35]/15 transition-all"
+            className={
+              "w-full h-12 px-4 rounded-lg border bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 transition-all " +
+              (idErr
+                ? "border-red-400 focus:border-red-500 focus:ring-red-500/15"
+                : "border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]/15")
+            }
           />
+          {idErr && <p className="text-xs text-red-500">{idErr}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -92,11 +118,16 @@ function LoginContent() {
               id="password"
               type={showPassword ? "text" : "password"}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); if (pwdErr) setPwdErr(null); }}
+              onBlur={() => setPwdErr(password ? null : "请填写密码")}
               placeholder="请输入密码"
               autoComplete="current-password"
-              required
-              className="w-full h-12 px-4 pr-12 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#FF6B35] focus:ring-2 focus:ring-[#FF6B35]/15 transition-all"
+              className={
+                "w-full h-12 px-4 pr-12 rounded-lg border bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 transition-all " +
+                (pwdErr
+                  ? "border-red-400 focus:border-red-500 focus:ring-red-500/15"
+                  : "border-gray-200 focus:border-[#FF6B35] focus:ring-[#FF6B35]/15")
+              }
             />
             <button
               type="button"
@@ -107,6 +138,7 @@ function LoginContent() {
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {pwdErr && <p className="text-xs text-red-500">{pwdErr}</p>}
         </div>
 
         <button
