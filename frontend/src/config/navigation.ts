@@ -19,6 +19,7 @@ import {
   ListChecks,
   Package,
   Receipt,
+  ScrollText,
   Send,
   Settings2,
   ShieldAlert,
@@ -175,6 +176,7 @@ export const WORKSPACES: Workspace[] = [
           { path: "/admin/roles",       label: "角色管理", icon: ShieldAlert, resource: "role",       requiredPermissions: [Permissions.ROLE_MANAGE],       description: "角色 → 权限点关系(目前由启动同步管理)" },
           { path: "/admin/permissions", label: "权限管理", icon: KeyRound,    resource: "permission", requiredPermissions: [Permissions.PERMISSION_MANAGE], description: "权限点清单总览" },
           { path: "/admin/config",      label: "系统配置", icon: Settings2,   resource: "system",     requiredPermissions: [Permissions.SYSTEM_CONFIG],     description: "JWT / 限流 / Trace 等系统级配置(只读展示)" },
+          { path: "/admin/audit-logs",  label: "审计日志", icon: ScrollText,  resource: "system",     requiredPermissions: [Permissions.SYSTEM_AUDIT],      description: "全平台敏感操作审计记录,支持按资源/动作/状态/邮箱/Trace ID 筛选" },
         ],
       },
       {
