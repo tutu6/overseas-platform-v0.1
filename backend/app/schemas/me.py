@@ -43,3 +43,26 @@ class ChangeUsernameIn(BaseModel):
         if not USERNAME_REGEX.match(v):
             raise ValueError("用户名 3-50 位,只能含字母/数字/下划线/短横,且不能纯数字")
         return v
+
+
+# 中国大陆手机号:11 位,1 开头,第二位 3-9(与 schemas/auth.py 保持一致)
+PHONE_REGEX = re.compile(r"^1[3-9]\d{9}$")
+
+
+class ChangePhoneIn(BaseModel):
+    """改/清空登录手机号(敏感:需要 current_password)。
+
+    new_phone 为空字符串或 null 表示清空(此后不能用手机号登录)。
+    """
+
+    new_phone: str | None = Field(default=None, max_length=30)
+    current_password: str = Field(..., min_length=1)
+
+    @field_validator("new_phone")
+    @classmethod
+    def _check(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not PHONE_REGEX.match(v):
+            raise ValueError("手机号必须是 11 位中国大陆号码(1 开头,第二位 3-9)")
+        return v

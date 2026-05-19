@@ -9,6 +9,7 @@ import {
   EyeOff,
   KeyRound,
   Loader2,
+  Phone,
   UserRound,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 
 const USERNAME_REGEX = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
+const PHONE_REGEX = /^1[3-9]\d{9}$/;
 
 function Inner() {
   const user = useAuthStore((s) => s.user);
@@ -41,8 +43,7 @@ function Inner() {
       <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
         <ProfileCard
           initialName={user.name}
-          initialPhone={user.phone}
-          onSaved={(u) => setUser({ ...user, name: u.name, phone: u.phone })}
+          onSaved={(u) => setUser({ ...user, name: u.name })}
         />
         <EmailCard
           currentEmail={user.email}
@@ -51,6 +52,10 @@ function Inner() {
         <UsernameCard
           currentUsername={user.username}
           onSaved={(u) => setUser({ ...user, username: u.username })}
+        />
+        <PhoneCard
+          currentPhone={user.phone}
+          onSaved={(u) => setUser({ ...user, phone: u.phone })}
         />
         <PasswordCard />
       </main>
@@ -163,15 +168,12 @@ function SubmitButton({ submitting, children }: { submitting: boolean; children:
 
 function ProfileCard({
   initialName,
-  initialPhone,
   onSaved,
 }: {
   initialName: string;
-  initialPhone: string | null;
-  onSaved: (u: { name: string; phone: string | null }) => void;
+  onSaved: (u: { name: string }) => void;
 }) {
   const [name, setName] = useState(initialName);
-  const [phone, setPhone] = useState(initialPhone ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -183,8 +185,8 @@ function ProfileCard({
     setSuccess("");
     setSubmitting(true);
     try {
-      const u = await authApi.updateProfile({ name, phone: phone || null });
-      onSaved({ name: u.name, phone: u.phone });
+      const u = await authApi.updateProfile({ name });
+      onSaved({ name: u.name });
       setSuccess("已保存");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "保存失败");
@@ -194,23 +196,98 @@ function ProfileCard({
   };
 
   return (
-    <SectionCard icon={UserRound} title="基础资料" desc="姓名与手机号(无需密码)">
+    <SectionCard icon={UserRound} title="基础资料" desc="姓名(无需密码)">
       {error && <Alert kind="error">{error}</Alert>}
       {success && <Alert kind="success">{success}</Alert>}
       <form className="space-y-4" onSubmit={onSubmit}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-sm font-semibold text-gray-700">姓名 *</Label>
-            <TextInput id="name" value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="phone" className="text-sm font-semibold text-gray-700">
-              手机号 <span className="font-normal text-gray-400">(留空清除)</span>
-            </Label>
-            <TextInput id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="name" className="text-sm font-semibold text-gray-700">姓名 *</Label>
+          <TextInput id="name" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <SubmitButton submitting={submitting}>保存</SubmitButton>
+      </form>
+    </SectionCard>
+  );
+}
+
+function PhoneCard({
+  currentPhone,
+  onSaved,
+}: {
+  currentPhone: string | null;
+  onSaved: (u: { phone: string | null }) => void;
+}) {
+  const [newPhone, setNewPhone] = useState(currentPhone ?? "");
+  const [pwd, setPwd] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newPhone.trim();
+    const target = trimmed === "" ? null : trimmed;
+    if (target && !PHONE_REGEX.test(target))
+      return setError("手机号须为 11 位中国大陆号码(1 开头,第二位 3-9)");
+    if (target === (currentPhone ?? null)) return setError("新手机号与当前一致");
+    if (!pwd) return setError("请输入当前密码");
+    setError("");
+    setSuccess("");
+    setSubmitting(true);
+    try {
+      const u = await authApi.changePhone(target, pwd);
+      onSaved({ phone: u.phone });
+      setSuccess(
+        target === null
+          ? "手机号已清空,后续不能再用手机号登录"
+          : `手机号已更新为 ${target}`
+      );
+      setPwd("");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.status === 401 ? "当前密码错误" : err.message);
+      } else {
+        setError("保存失败");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <SectionCard
+      icon={Phone}
+      title="登录手机号"
+      desc={`当前:${currentPhone ?? "(未设置,不能用手机号登录)"} · 留空清除(需当前密码)`}
+    >
+      {error && <Alert kind="error">{error}</Alert>}
+      {success && <Alert kind="success">{success}</Alert>}
+      <form className="space-y-4" onSubmit={onSubmit}>
+        <div className="space-y-1.5">
+          <Label htmlFor="newPhone" className="text-sm font-semibold text-gray-700">
+            新手机号 <span className="font-normal text-gray-400">(留空 = 清除)</span>
+          </Label>
+          <TextInput
+            id="newPhone"
+            inputMode="numeric"
+            value={newPhone}
+            onChange={(e) => setNewPhone(e.target.value.replace(/\D/g, "").slice(0, 11))}
+            placeholder="11 位"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="phonePwd" className="text-sm font-semibold text-gray-700">当前密码</Label>
+          <PasswordInput
+            id="phonePwd"
+            value={pwd}
+            onChange={setPwd}
+            show={showPwd}
+            onToggle={() => setShowPwd(!showPwd)}
+            autoComplete="current-password"
+          />
+        </div>
+        <SubmitButton submitting={submitting}>更新手机号</SubmitButton>
       </form>
     </SectionCard>
   );

@@ -31,5 +31,6 @@ class AuditAction(str, Enum):
     PROFILE_UPDATE = "PROFILE_UPDATE"   # 改 name/phone 等低风险字段
     EMAIL_CHANGE = "EMAIL_CHANGE"       # 改登录邮箱
     USERNAME_CHANGE = "USERNAME_CHANGE" # 改/清空登录用户名
+    PHONE_CHANGE = "PHONE_CHANGE"       # 改/清空登录手机号
     ROLE_ASSIGN = "ROLE_ASSIGN"
     ROLE_REVOKE = "ROLE_REVOKE"

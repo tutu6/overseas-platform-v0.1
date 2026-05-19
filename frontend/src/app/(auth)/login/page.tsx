@@ -21,7 +21,7 @@ function LoginContent() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier || !password) {
-      setError("请填写用户名/邮箱和密码");
+      setError("请填写邮箱 / 用户名 / 手机号和密码");
       return;
     }
     setError(null);
@@ -33,7 +33,7 @@ function LoginContent() {
         if (err.status === 429) {
           setError("登录失败次数过多,账户已临时锁定,请 5 分钟后重试");
         } else if (err.status === 401) {
-          setError("用户名/邮箱或密码错误,请重试");
+          setError("凭证或密码错误,请重试");
         } else {
           setError(err.message || "登录失败");
         }
@@ -69,14 +69,14 @@ function LoginContent() {
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-1.5">
           <Label htmlFor="identifier" className="text-sm font-semibold text-gray-700">
-            用户名 / 邮箱
+            邮箱 / 用户名 / 手机号
           </Label>
           <input
             id="identifier"
             type="text"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            placeholder="输入用户名或邮箱"
+            placeholder="输入邮箱、用户名或 11 位手机号"
             autoComplete="username"
             required
             className="w-full h-12 px-4 rounded-lg border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-[#FF6B35] focus:ring-2 focus:ring-[#FF6B35]/15 transition-all"

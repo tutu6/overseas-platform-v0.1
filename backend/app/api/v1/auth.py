@@ -25,7 +25,7 @@ from app.schemas.auth import (
     SupplierRegisterIn,
     TokenOut,
 )
-from app.schemas.me import ChangeEmailIn, ChangeUsernameIn, ProfileUpdateIn
+from app.schemas.me import ChangeEmailIn, ChangePhoneIn, ChangeUsernameIn, ProfileUpdateIn
 from app.services import auth_service, me_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -280,6 +280,23 @@ async def change_my_username(
         db,
         user_id=current.id,
         new_username=body.new_username,
+        current_password=body.current_password,
+        request=request,
+    )
+    return success(_me_payload(user))
+
+
+@router.post("/me/phone", summary="修改/清空自己登录手机号(需当前密码)")
+async def change_my_phone(
+    body: ChangePhoneIn,
+    request: Request,
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user = await me_service.change_phone(
+        db,
+        user_id=current.id,
+        new_phone=body.new_phone,
         current_password=body.current_password,
         request=request,
     )

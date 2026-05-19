@@ -84,6 +84,9 @@ export const authApi = {
 
   changeUsername: (new_username: string | null, current_password: string) =>
     api.post<MeBasic>("/api/v1/auth/me/username", { new_username, current_password }),
+
+  changePhone: (new_phone: string | null, current_password: string) =>
+    api.post<MeBasic>("/api/v1/auth/me/phone", { new_phone, current_password }),
 };
 
 /** /me/* 接口返回的简版 user(不含 roles/permissions/organization) */
