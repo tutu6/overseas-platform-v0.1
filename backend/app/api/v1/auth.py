@@ -3,11 +3,16 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import CurrentUser, get_current_user
-from app.core.exceptions import success
+from app.core.exceptions import NotAuthenticatedError, success
+from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.db.models.user import User, UserStatus
+from jose import JWTError
+from urllib.parse import urlparse
 from app.db.session import get_db
 from app.rbac.constants import Permissions
 from app.rbac.guards import require_permission
@@ -64,16 +69,51 @@ async def register_supplier(
     return success(RegisterOut(user_id=user.id, email=user.email).model_dump())
 
 
-@router.post("/login", summary="登录(返回 JWT,不返回 permissions)")
+def _origin_allowed(origin_header: str | None, allowed: list[str]) -> bool:
+    """Origin/Referer 白名单校验(CSRF 防御)。
+
+    取 origin_header 的 scheme://host[:port],与 allowed 列表精确匹配。
+    """
+    if not origin_header:
+        return False
+    parsed = urlparse(origin_header)
+    if not parsed.scheme or not parsed.hostname:
+        return False
+    port = f":{parsed.port}" if parsed.port else ""
+    normalized = f"{parsed.scheme}://{parsed.hostname}{port}"
+    return normalized in allowed
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """统一封装:把 refresh token 写入 httpOnly cookie。"""
+    response.set_cookie(
+        key=settings.REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=settings.REFRESH_COOKIE_MAX_AGE,
+        path=settings.REFRESH_COOKIE_PATH,
+        httponly=True,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+    )
+
+
+@router.post("/login", summary="登录(access 在 body,refresh 在 httpOnly cookie)")
 async def login(
     body: LoginIn,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     tokens = await auth_service.login(
         db, identifier=body.identifier, password=body.password, request=request
     )
-    return success(TokenOut(**tokens).model_dump())
+    # refresh 不入 body,通过 httpOnly cookie 下发
+    _set_refresh_cookie(response, tokens["refresh_token"])
+    return success(TokenOut(
+        access_token=tokens["access_token"],
+        token_type=tokens["token_type"],
+        expires_in=tokens["expires_in"],
+    ).model_dump())
 
 
 @router.get("/me", summary="当前用户:roles + permissions + organization")
@@ -94,14 +134,69 @@ async def me(current: CurrentUser = Depends(get_current_user)):
     return success(data)
 
 
-@router.post("/logout", summary="登出(无状态,只写审计)")
+@router.post("/refresh", summary="用 httpOnly cookie 中的 refresh token 换新 access(并轮转 refresh)")
+async def refresh(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    # 1. CSRF 防御:Origin/Referer 必须在白名单
+    origin = request.headers.get("origin") or request.headers.get("referer")
+    if not _origin_allowed(origin, settings.CORS_ORIGINS):
+        raise NotAuthenticatedError("Invalid origin")
+
+    # 2. 从 httpOnly cookie 读 refresh token
+    refresh_token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        raise NotAuthenticatedError("No refresh token")
+
+    # 3. 解码 + 校验(type 必须 refresh)
+    try:
+        payload = decode_token(refresh_token, expected_type="refresh")
+    except JWTError:
+        raise NotAuthenticatedError("Invalid refresh token")
+
+    user_id_raw = payload.get("sub")
+    if user_id_raw is None:
+        raise NotAuthenticatedError("Invalid token payload")
+    try:
+        user_id = int(user_id_raw)
+    except (TypeError, ValueError):
+        raise NotAuthenticatedError("Invalid token payload")
+
+    # 4. 用户必须 ACTIVE
+    user = await db.get(User, user_id)
+    if user is None or user.status != UserStatus.ACTIVE:
+        raise NotAuthenticatedError("User unavailable")
+
+    # 5. 签新 access + 新 refresh(refresh 轮转,降低盗用窗口)
+    new_access, expires_in = create_access_token(user.id, user.email)
+    new_refresh = create_refresh_token(user.id, user.email)
+
+    # 6. 新 refresh 写回 cookie
+    _set_refresh_cookie(response, new_refresh)
+
+    # 7. 返回新 access(refresh 静默,**不写 audit_logs** 避免噪音)
+    return success({
+        "access_token": new_access,
+        "token_type": "Bearer",
+        "expires_in": expires_in,
+    })
+
+
+@router.post("/logout", summary="登出(清 cookie + 写审计)")
 async def logout(
     request: Request,
+    response: Response,
     current: CurrentUser = Depends(require_permission(Permissions.AUTH_LOGOUT)),
     db: AsyncSession = Depends(get_db),
 ):
     await auth_service.logout(
         db, user_id=current.id, user_email=current.email, request=request
+    )
+    response.delete_cookie(
+        key=settings.REFRESH_COOKIE_NAME,
+        path=settings.REFRESH_COOKIE_PATH,
     )
     return success(None)
 

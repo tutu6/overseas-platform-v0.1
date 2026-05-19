@@ -25,10 +25,11 @@ export interface MeData {
 }
 
 export interface LoginResult {
+  /** access token,前端存 Zustand 内存 */
   access_token: string;
-  refresh_token: string;
   token_type: string;
   expires_in: number;
+  /** refresh token 由后端通过 httpOnly cookie 下发,前端 JS 读不到 */
 }
 
 export const authApi = {

@@ -43,10 +43,15 @@ app = FastAPI(
 )
 
 # 中间件顺序:CORS 在最外,Trace ID 在内层(响应头由内向外回写,均能加上)
+# 注:带 credentials 时 allow_origins 必须是严格白名单,不能是 "*"(浏览器会拒)
+if "*" in settings.CORS_ORIGINS:
+    raise RuntimeError(
+        "CORS_ORIGINS 不能包含 `*`(refresh cookie 需要带凭证,浏览器拒收 `*` 配合 credentials)"
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Trace-Id"],

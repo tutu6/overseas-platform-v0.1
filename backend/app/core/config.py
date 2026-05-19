@@ -45,6 +45,16 @@ class Settings(BaseSettings):
     # 调试 API(/api/_debug/*)是否开启;生产应关闭
     ENABLE_DEBUG_API: bool = True
 
+    # Refresh token cookie 配置(本机 http 开发用 SECURE=False;生产 https 必须 True)
+    REFRESH_COOKIE_NAME: str = "refresh_token"
+    REFRESH_COOKIE_PATH: str = "/api/v1/auth"
+    REFRESH_COOKIE_MAX_AGE: int = 7 * 24 * 3600  # 7 天,与 refresh JWT TTL 一致
+    REFRESH_COOKIE_SECURE: bool = False
+    REFRESH_COOKIE_SAMESITE: str = "strict"  # strict / lax / none
+
+    # CORS 允许携带凭证(refresh cookie 必需)
+    CORS_ALLOW_CREDENTIALS: bool = True
+
     @computed_field  # type: ignore[misc]
     @property
     def CORS_ORIGINS(self) -> List[str]:
