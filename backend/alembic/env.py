@@ -15,21 +15,11 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db import models as _models  # noqa: E402,F401  注册所有模型
+from app.db.url import prepare_sync_url  # noqa: E402
 
 config = context.config
 
-
-def _to_sync_url(dsn: str) -> str:
-    """把 async DSN 转成 sync 版,供 Alembic 同步引擎使用。
-
-    PostgreSQL: postgresql+asyncpg → postgresql+psycopg
-    """
-    if "+asyncpg" in dsn:
-        return dsn.replace("+asyncpg", "+psycopg")
-    return dsn
-
-
-sync_url = _to_sync_url(settings.DATABASE_URL)
+sync_url = prepare_sync_url(settings.DATABASE_URL)
 config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:
