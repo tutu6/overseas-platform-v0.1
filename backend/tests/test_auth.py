@@ -11,6 +11,9 @@ BUYER_PAYLOAD = {
     "name": "张三",
     "phone": "13800138000",
     "password": "Abcd1234",
+    # 与 seed 的中建三局 USC 一致 → 注册时加入该组织,不新建
+    "company_name": "中建三局",
+    "unified_social_credit_code": "91420100MA4KXXXX01",
 }
 
 SUPPLIER_PAYLOAD = {

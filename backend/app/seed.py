@@ -1,7 +1,10 @@
 """启动种子。
 
-- 中建三局 BuyerOrganization(code=CSCEC3B)
+- 中建三局 BuyerOrganization(演示用,带占位 USC)
 - 初始 super admin(env 注入,must_change_password=true,绝不覆盖已有)
+
+注:register_buyer 不再依赖此种子组织,信用代码识别企业。中建三局组织保留
+仅为本地演示便利;生产应通过 SEED_DEMO_ACCOUNTS 开关关闭(T6 引入)。
 """
 from __future__ import annotations
 
@@ -18,12 +21,20 @@ from app.db.models.buyer_organization import BuyerOrganization, BuyerOrgStatus
 from app.db.models.role import Role, RoleCode
 from app.db.models.user import User, UserStatus
 from app.db.models.user_role import UserRole
-from app.services.auth_service import CSCEC3B_CODE
 
 logger = logging.getLogger(__name__)
 
+# 中建三局 demo 组织标识(seed 内部使用)
+CSCEC3B_CODE = "CSCEC3B"
+# 占位信用代码:18 位假数据,仅 demo seed 使用
+CSCEC3B_USC_PLACEHOLDER = "91420100MA4KXXXX01"
+
 
 async def seed_buyer_org(db: AsyncSession) -> None:
+    """种入中建三局 demo BuyerOrg(含占位信用代码)。
+
+    幂等:已存在则跳过。
+    """
     row = await db.execute(
         select(BuyerOrganization).where(BuyerOrganization.code == CSCEC3B_CODE)
     )
@@ -32,11 +43,16 @@ async def seed_buyer_org(db: AsyncSession) -> None:
     db.add(BuyerOrganization(
         name="中建三局",
         code=CSCEC3B_CODE,
-        description="中国建筑第三工程局有限公司(MVP 唯一业主方)",
+        unified_social_credit_code=CSCEC3B_USC_PLACEHOLDER,
+        description="中国建筑第三工程局有限公司(MVP 演示用,信用代码为占位假数据)",
         status=BuyerOrgStatus.ACTIVE,
     ))
     await db.commit()
-    logger.info("Seed: BuyerOrganization '中建三局' created.")
+    logger.warning(
+        "Seed: BuyerOrganization '中建三局' created (USC=%s). "
+        "**仅用于开发演示,生产环境务必删除**",
+        CSCEC3B_USC_PLACEHOLDER,
+    )
 
 
 async def _seed_internal_account(

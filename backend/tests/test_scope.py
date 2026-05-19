@@ -57,7 +57,13 @@ async def _login(client, email, password):
 async def _buyer_token(client):
     await client.post(
         "/api/v1/auth/register/buyer",
-        json={"email": "buyer.scope@x.com", "name": "B", "password": "Abcd1234"},
+        json={
+            "email": "buyer.scope@x.com",
+            "name": "B",
+            "password": "Abcd1234",
+            "company_name": "中建三局",
+            "unified_social_credit_code": "91420100MA4KXXXX01",
+        },
     )
     return await _login(client, "buyer.scope@x.com", "Abcd1234")
 

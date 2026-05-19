@@ -26,18 +26,16 @@ from app.core.security import (
 )
 from app.db.models.audit_log import AuditStatus
 from app.db.models.buyer_member import BuyerMember
-from app.db.models.buyer_organization import BuyerOrganization
+from app.db.models.buyer_organization import BuyerOrganization, BuyerOrgStatus
 from app.db.models.role import Role, RoleCode
 from app.db.models.supplier_member import SupplierMember
 from app.db.models.supplier_organization import SupplierOrganization
 from app.db.models.user import User, UserStatus
 from app.db.models.user_role import UserRole
 from app.services.rate_limit import login_rate_limiter
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
-
-# 中建三局组织 code,种子保证存在
-CSCEC3B_CODE = "CSCEC3B"
 
 
 def _client_ip(request: Request | None) -> str:
@@ -81,9 +79,17 @@ async def register_buyer(
     name: str,
     phone: str | None,
     password: str,
+    company_name: str,
+    unified_social_credit_code: str,
     username: str | None = None,
     request: Request | None = None,
 ) -> User:
+    """采购方自助注册:按 unified_social_credit_code 识别企业。
+
+    - 信用代码对应组织不存在 → 创建新 BuyerOrg,该用户成为 owner
+    - 信用代码对应组织已存在 → 加入该组织,is_owner=false;若 company_name 与
+      DB 中已存在的名字不一致,记 warn 日志后采用 DB 中已有名字(不阻断)
+    """
     if not validate_password_strength(password):
         raise ValidationFailedError("密码不符合规则(8-32 位,至少 1 字母 1 数字)")
     if await _email_exists(db, email):
@@ -91,14 +97,46 @@ async def register_buyer(
     if username and await _username_exists(db, username):
         raise ConflictError("用户名已存在")
 
-    # 取中建三局组织
+    # 按 USC 查 BuyerOrg
     org_row = await db.execute(
-        select(BuyerOrganization).where(BuyerOrganization.code == CSCEC3B_CODE)
+        select(BuyerOrganization).where(
+            BuyerOrganization.unified_social_credit_code == unified_social_credit_code
+        )
     )
     org = org_row.scalar_one_or_none()
+    org_created = False
+
     if org is None:
-        # 种子异常,作为运维问题处理
-        raise NotFoundError("默认采购方组织未初始化,请联系运维")
+        # 新建组织:用户成为 owner;唯一约束兜底竞态
+        org = BuyerOrganization(
+            name=company_name,
+            unified_social_credit_code=unified_social_credit_code,
+            status=BuyerOrgStatus.ACTIVE,
+        )
+        db.add(org)
+        try:
+            await db.flush()
+            org_created = True
+        except IntegrityError:
+            # 同一信用代码并发插入,回滚后回查
+            await db.rollback()
+            org_row = await db.execute(
+                select(BuyerOrganization).where(
+                    BuyerOrganization.unified_social_credit_code
+                    == unified_social_credit_code
+                )
+            )
+            org = org_row.scalar_one()
+            org_created = False
+    else:
+        if org.name != company_name:
+            logger.warning(
+                "register_buyer: company_name mismatch for USC=%s "
+                "(input=%r, db=%r);沿用 DB 已有名字",
+                unified_social_credit_code, company_name, org.name,
+            )
+
+    is_owner = org_created
 
     user = User(
         email=email,
@@ -112,7 +150,7 @@ async def register_buyer(
     db.add(user)
     await db.flush()
 
-    db.add(BuyerMember(user_id=user.id, buyer_org_id=org.id, is_owner=False))
+    db.add(BuyerMember(user_id=user.id, buyer_org_id=org.id, is_owner=is_owner))
     role = await _get_role(db, RoleCode.BUYER)
     db.add(UserRole(user_id=user.id, role_id=role.id))
 
@@ -124,7 +162,13 @@ async def register_buyer(
         user_email=user.email,
         resource_id=user.id,
         request=request,
-        extra={"role": RoleCode.BUYER, "buyer_org_id": org.id},
+        extra={
+            "role": RoleCode.BUYER,
+            "buyer_org_id": org.id,
+            "is_owner": is_owner,
+            "org_created": org_created,
+            "unified_social_credit_code": unified_social_credit_code,
+        },
         commit=False,
     )
     await db.commit()

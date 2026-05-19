@@ -44,6 +44,8 @@ async def register_buyer(
         name=body.name,
         phone=body.phone,
         password=body.password,
+        company_name=body.company_name,
+        unified_social_credit_code=body.unified_social_credit_code,
         request=request,
     )
     return success(RegisterOut(user_id=user.id, email=user.email).model_dump())

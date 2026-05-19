@@ -22,6 +22,8 @@ type Role = "BUYER" | "SUPPLIER" | "";
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_\-]{8,32}$/;
 // 用户名:3-50 位字母/数字/下划线/短横,且不能纯数字(与后端 USERNAME_REGEX 等价)
 const USERNAME_REGEX = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
+// 统一社会信用代码:严格 18 位大写字母+数字(与后端 USC_REGEX 等价)
+const USC_REGEX = /^[0-9A-Z]{18}$/;
 
 interface FormState {
   name: string;
@@ -31,6 +33,7 @@ interface FormState {
   password: string;
   confirmPassword: string;
   companyName: string;
+  unifiedSocialCreditCode: string;
   businessLicenseNo: string;
 }
 
@@ -42,6 +45,7 @@ const initialForm: FormState = {
   password: "",
   confirmPassword: "",
   companyName: "",
+  unifiedSocialCreditCode: "",
   businessLicenseNo: "",
 };
 
@@ -68,6 +72,12 @@ export default function RegisterPage() {
     if (!form.password) return "请填写密码";
     if (!PASSWORD_REGEX.test(form.password)) return "密码 8-32 位,且至少包含 1 个字母和 1 个数字";
     if (form.password !== form.confirmPassword) return "两次输入的密码不一致";
+    if (role === "BUYER") {
+      if (!form.companyName.trim()) return "请填写公司名称";
+      if (!form.unifiedSocialCreditCode.trim()) return "请填写统一社会信用代码";
+      if (!USC_REGEX.test(form.unifiedSocialCreditCode))
+        return "统一社会信用代码须为 18 位大写字母与数字";
+    }
     if (role === "SUPPLIER") {
       if (!form.companyName.trim()) return "请填写公司名称";
       if (!form.businessLicenseNo.trim()) return "请填写营业执照号";
@@ -92,6 +102,8 @@ export default function RegisterPage() {
           name: form.name,
           phone: form.phone || undefined,
           password: form.password,
+          company_name: form.companyName,
+          unified_social_credit_code: form.unifiedSocialCreditCode,
         });
       } else {
         await authApi.registerSupplier({
@@ -305,9 +317,45 @@ export default function RegisterPage() {
             )}
 
             {role === "BUYER" && (
-              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-[#003366]">
-                注:采购方账号默认隶属 <strong>中建三局</strong>。
-              </p>
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="companyName" className="text-sm font-semibold text-gray-700">
+                    公司名称 *
+                  </Label>
+                  <input
+                    id="companyName"
+                    name="companyName"
+                    value={form.companyName}
+                    onChange={handleChange}
+                    placeholder="请填写完整公司名称"
+                    required
+                    className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#003366] focus:outline-none focus:ring-2 focus:ring-[#003366]/15"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="unifiedSocialCreditCode" className="text-sm font-semibold text-gray-700">
+                    统一社会信用代码 * <span className="font-normal text-gray-400">(18 位大写字母与数字)</span>
+                  </Label>
+                  <input
+                    id="unifiedSocialCreditCode"
+                    name="unifiedSocialCreditCode"
+                    value={form.unifiedSocialCreditCode}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        unifiedSocialCreditCode: e.target.value.toUpperCase().slice(0, 18),
+                      }))
+                    }
+                    placeholder="如 91110000XXXXXXXXX1"
+                    required
+                    maxLength={18}
+                    className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm uppercase text-gray-800 placeholder-gray-400 transition-all focus:border-[#003366] focus:outline-none focus:ring-2 focus:ring-[#003366]/15"
+                  />
+                  <p className="text-xs text-gray-400">
+                    系统按信用代码识别企业:首次填写将创建新组织,与已有组织信用代码相同则自动加入。
+                  </p>
+                </div>
+              </>
             )}
 
             <div className="space-y-1.5">

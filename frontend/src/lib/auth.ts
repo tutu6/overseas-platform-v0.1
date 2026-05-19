@@ -54,6 +54,8 @@ export const authApi = {
     name: string;
     phone?: string;
     password: string;
+    company_name: string;
+    unified_social_credit_code: string;
   }) =>
     api.post<{ user_id: number; email: string }>(
       "/api/v1/auth/register/buyer",

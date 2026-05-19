@@ -58,7 +58,11 @@ async def test_login_locked_audit(client, db_session):
 async def test_register_audit(client, db_session):
     await client.post(
         "/api/v1/auth/register/buyer",
-        json={"email": "z@cscec3b.com", "name": "Z", "password": "Abcd1234"},
+        json={
+            "email": "z@cscec3b.com", "name": "Z", "password": "Abcd1234",
+            "company_name": "中建三局",
+            "unified_social_credit_code": "91420100MA4KXXXX01",
+        },
     )
     n, rows = await _audit_count(db_session, action="REGISTER")
     assert n >= 1
@@ -92,7 +96,11 @@ async def test_create_internal_user_audit(client, db_session):
 async def test_password_change_audit(client, db_session):
     await client.post(
         "/api/v1/auth/register/buyer",
-        json={"email": "z@cscec3b.com", "name": "Z", "password": "Abcd1234"},
+        json={
+            "email": "z@cscec3b.com", "name": "Z", "password": "Abcd1234",
+            "company_name": "中建三局",
+            "unified_social_credit_code": "91420100MA4KXXXX01",
+        },
     )
     login = await client.post(
         "/api/v1/auth/login",

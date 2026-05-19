@@ -27,6 +27,8 @@ async def _register_buyer(client, email="buyer1@cscec3b.com"):
         "name": "Buyer 1",
         "phone": "13800138000",
         "password": "Abcd1234",
+        "company_name": "中建三局",
+        "unified_social_credit_code": "91420100MA4KXXXX01",
     }
     r = await client.post("/api/v1/auth/register/buyer", json=payload)
     assert r.status_code == 200, r.text
