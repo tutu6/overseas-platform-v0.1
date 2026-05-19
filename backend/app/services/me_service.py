@@ -143,6 +143,52 @@ async def change_email(
     return user
 
 
+async def change_phone(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    new_phone: str | None,
+    current_password: str,
+    request: Request | None = None,
+) -> User:
+    """改/清空登录手机号。new_phone=None 或空字符串表示清空。"""
+    user = await _load_user(db, user_id)
+
+    new_value: str | None = new_phone if new_phone else None
+    if new_value == user.phone:
+        return user  # 无变更,幂等
+
+    await _ensure_current_password(
+        db, user, current_password,
+        audit_action=AuditAction.PHONE_CHANGE, request=request,
+    )
+
+    if new_value is not None:
+        row = await db.execute(
+            select(User.id).where(User.phone == new_value, User.id != user.id)
+        )
+        if row.scalar_one_or_none() is not None:
+            raise ConflictError("该手机号已被其他账号使用")
+
+    old_phone = user.phone
+    user.phone = new_value
+
+    await write_audit(
+        db,
+        resource_type=AuditResourceType.USER,
+        action=AuditAction.PHONE_CHANGE,
+        user_id=user.id,
+        user_email=user.email,
+        resource_id=user.id,
+        request=request,
+        extra={"old_phone": old_phone, "new_phone": new_value},
+        commit=False,
+    )
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 async def change_username(
     db: AsyncSession,
     *,

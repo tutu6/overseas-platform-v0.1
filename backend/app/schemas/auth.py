@@ -14,6 +14,9 @@ USERNAME_REGEX = re.compile(r"^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$")
 # 统一社会信用代码:严格 18 位,大写字母 + 数字(国标 GB 32100-2015)
 USC_REGEX = re.compile(r"^[0-9A-Z]{18}$")
 
+# 中国大陆手机号:11 位,1 开头,第二位 3-9
+PHONE_REGEX = re.compile(r"^1[3-9]\d{9}$")
+
 
 def _validate_password(v: str) -> str:
     if not validate_password_strength(v):
@@ -26,6 +29,15 @@ def _validate_username_optional(v: str | None) -> str | None:
         return None
     if not USERNAME_REGEX.match(v):
         raise ValueError("用户名 3-50 位,只能含字母/数字/下划线/短横,且不能纯数字")
+    return v
+
+
+def _validate_phone_optional(v: str | None) -> str | None:
+    """phone 选填;若提供必须是中国大陆 11 位手机号。"""
+    if v is None or v == "":
+        return None
+    if not PHONE_REGEX.match(v):
+        raise ValueError("手机号必须是 11 位中国大陆号码(1 开头,第二位 3-9)")
     return v
 
 
@@ -48,6 +60,11 @@ class BuyerRegisterIn(BaseModel):
     @classmethod
     def _check_username(cls, v: str | None) -> str | None:
         return _validate_username_optional(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _check_phone(cls, v: str | None) -> str | None:
+        return _validate_phone_optional(v)
 
     @field_validator("unified_social_credit_code")
     @classmethod
@@ -75,6 +92,11 @@ class SupplierRegisterIn(BaseModel):
     @classmethod
     def _check_username(cls, v: str | None) -> str | None:
         return _validate_username_optional(v)
+
+    @field_validator("phone")
+    @classmethod
+    def _check_phone(cls, v: str | None) -> str | None:
+        return _validate_phone_optional(v)
 
 
 class RegisterOut(BaseModel):

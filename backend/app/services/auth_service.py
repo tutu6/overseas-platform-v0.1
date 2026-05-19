@@ -62,11 +62,29 @@ async def _username_exists(db: AsyncSession, username: str) -> bool:
     return row.scalar_one_or_none() is not None
 
 
-async def _find_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
-    """identifier 含 '@' → 当 email 查;否则当 username 查。"""
+async def _phone_exists(db: AsyncSession, phone: str) -> bool:
+    row = await db.execute(select(User.id).where(User.phone == phone))
+    return row.scalar_one_or_none() is not None
+
+
+def _classify_identifier(identifier: str) -> str:
+    """返回 'email' / 'phone' / 'username',用于日志和分支查询。"""
     ident = identifier.strip()
     if "@" in ident:
+        return "email"
+    if ident.isdigit() and len(ident) == 11 and ident.startswith("1"):
+        return "phone"
+    return "username"
+
+
+async def _find_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
+    """三选一识别:邮箱(含 @)/ 11 位手机号 / 用户名。"""
+    ident = identifier.strip()
+    kind = _classify_identifier(ident)
+    if kind == "email":
         row = await db.execute(select(User).where(User.email == ident))
+    elif kind == "phone":
+        row = await db.execute(select(User).where(User.phone == ident))
     else:
         row = await db.execute(select(User).where(User.username == ident))
     return row.scalar_one_or_none()
@@ -96,6 +114,8 @@ async def register_buyer(
         raise ConflictError("Email 已存在")
     if username and await _username_exists(db, username):
         raise ConflictError("用户名已存在")
+    if phone and await _phone_exists(db, phone):
+        raise ConflictError("手机号已存在")
 
     # 按 USC 查 BuyerOrg
     org_row = await db.execute(
@@ -194,6 +214,8 @@ async def register_supplier(
         raise ConflictError("Email 已存在")
     if username and await _username_exists(db, username):
         raise ConflictError("用户名已存在")
+    if phone and await _phone_exists(db, phone):
+        raise ConflictError("手机号已存在")
     # 营业执照唯一校验
     row = await db.execute(
         select(SupplierOrganization.id).where(
@@ -312,7 +334,7 @@ async def login(
         user_id=user.id,
         user_email=user.email,
         request=request,
-        extra={"identifier_used": "email" if "@" in identifier else "username"},
+        extra={"identifier_used": _classify_identifier(identifier)},
     )
     return {
         "access_token": access_token,

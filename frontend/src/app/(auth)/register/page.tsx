@@ -24,6 +24,8 @@ const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_\-]{8,32}$/;
 const USERNAME_REGEX = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
 // 统一社会信用代码:严格 18 位大写字母+数字(与后端 USC_REGEX 等价)
 const USC_REGEX = /^[0-9A-Z]{18}$/;
+// 中国大陆 11 位手机号(与后端 PHONE_REGEX 等价)
+const PHONE_REGEX = /^1[3-9]\d{9}$/;
 
 interface FormState {
   name: string;
@@ -69,6 +71,8 @@ export default function RegisterPage() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return "请填写有效的邮箱地址";
     if (form.username && !USERNAME_REGEX.test(form.username))
       return "用户名 3-50 位,只能含字母/数字/下划线/短横,且不能纯数字";
+    if (form.phone && !PHONE_REGEX.test(form.phone))
+      return "手机号须为 11 位中国大陆号码(1 开头,第二位 3-9)";
     if (!form.password) return "请填写密码";
     if (!PASSWORD_REGEX.test(form.password)) return "密码 8-32 位,且至少包含 1 个字母和 1 个数字";
     if (form.password !== form.confirmPassword) return "两次输入的密码不一致";
@@ -238,16 +242,25 @@ export default function RegisterPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="phone" className="text-sm font-semibold text-gray-700">
-                  手机号
+                  手机号 <span className="font-normal text-gray-400">(选填,可作登录凭证)</span>
                 </Label>
                 <input
                   id="phone"
                   name="phone"
+                  inputMode="numeric"
                   value={form.phone}
-                  onChange={handleChange}
-                  placeholder="选填"
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      phone: e.target.value.replace(/\D/g, "").slice(0, 11),
+                    }))
+                  }
+                  placeholder="11 位"
                   className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 placeholder-gray-400 transition-all focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
                 />
+                {form.phone && !PHONE_REGEX.test(form.phone) && (
+                  <p className="text-xs text-red-500">手机号须为 11 位中国大陆号码</p>
+                )}
               </div>
             </div>
 
