@@ -11,6 +11,9 @@ from app.core.security import validate_password_strength
 # 用户名规则:3-50 位,字母/数字/下划线/短横,不能纯数字
 USERNAME_REGEX = re.compile(r"^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$")
 
+# 统一社会信用代码:严格 18 位,大写字母 + 数字(国标 GB 32100-2015)
+USC_REGEX = re.compile(r"^[0-9A-Z]{18}$")
+
 
 def _validate_password(v: str) -> str:
     if not validate_password_strength(v):
@@ -32,6 +35,9 @@ class BuyerRegisterIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     phone: str | None = Field(default=None, max_length=30)
     password: str
+    # 公司信息:按统一社会信用代码识别企业(不存在则建新组织,存在则加入)
+    company_name: str = Field(..., min_length=1, max_length=200)
+    unified_social_credit_code: str = Field(..., min_length=18, max_length=18)
 
     @field_validator("password")
     @classmethod
@@ -42,6 +48,13 @@ class BuyerRegisterIn(BaseModel):
     @classmethod
     def _check_username(cls, v: str | None) -> str | None:
         return _validate_username_optional(v)
+
+    @field_validator("unified_social_credit_code")
+    @classmethod
+    def _check_usc(cls, v: str) -> str:
+        if not USC_REGEX.match(v):
+            raise ValueError("统一社会信用代码必须为 18 位大写字母与数字")
+        return v
 
 
 class SupplierRegisterIn(BaseModel):
