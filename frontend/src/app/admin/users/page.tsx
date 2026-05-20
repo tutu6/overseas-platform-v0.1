@@ -370,7 +370,7 @@ function CreateModal({
             {fieldErr.password ? (
               <p className="mt-1 text-xs text-red-500">{fieldErr.password}</p>
             ) : (
-              <p className="mt-1 text-xs text-slate-400">8-32 位,至少 1 字母 + 1 数字</p>
+              <p className="mt-1 text-xs text-slate-400">11-50 位,需包含数字、大写字母、小写字母、特殊字符中至少 3 类</p>
             )}
           </Field>
           <Field id="role" label="角色 *">

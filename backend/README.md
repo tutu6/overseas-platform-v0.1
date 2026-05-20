@@ -96,7 +96,7 @@ bash scripts/reset_db.sh   # drop + create overseas_supply_dev → 重跑迁移
 |---|---|
 | 数据库 | PostgreSQL 16 + asyncpg(本机 brew 端口 5433)。**禁止厂商特有语法**,保 ORM 抽象。 |
 | 时间 | 应用层强制 UTC(`datetime.now(timezone.utc)`)|
-| 密码 | bcrypt(passlib),规则 8-32 位 + 至少 1 字母 1 数字 |
+| 密码 | bcrypt(passlib),规则 11-50 位 + 数字/大写/小写/特殊字符至少 3 类(PRD v1.4 Δ1)|
 | JWT | HS256,access 15min / refresh 7d,**不放 permissions**(走 `/auth/me`)|
 | 限流 | 进程内 dict,`(email, ip)` 维度,60s 内 5 次失败锁 5 分钟 |
 | RBAC | 配置文件(`app/rbac/permissions_config.py`)+ 启动同步到数据库(TODO(Q22))|

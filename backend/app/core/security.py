@@ -1,7 +1,6 @@
 """密码哈希 + JWT 编解码。"""
 from __future__ import annotations
 
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
@@ -12,8 +11,15 @@ from app.core.config import settings
 
 _pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# 密码规则:8-32 位,至少 1 字母 + 1 数字
-PASSWORD_REGEX = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_-]{8,32}$")
+# 全局密码规则(PRD v1.4 Δ1):11-50 位,且 数字/大写/小写/特殊字符 4 类中至少 3 类。
+# 特殊字符宽松定义:任何非字母数字字符。
+PASSWORD_MIN_LENGTH = 11
+PASSWORD_MAX_LENGTH = 50
+
+# 错误文案前后端逐字一致(frontend/src/lib/validators.ts 同步)
+PASSWORD_RULE_MESSAGE = (
+    "密码 11-50 位,需包含数字、大写字母、小写字母、特殊字符中至少 3 类"
+)
 
 
 def hash_password(plain: str) -> str:
@@ -28,7 +34,16 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def validate_password_strength(plain: str) -> bool:
-    return bool(PASSWORD_REGEX.match(plain))
+    """11-50 位 + 数字/大写/小写/特殊字符至少 3 类。"""
+    if not (PASSWORD_MIN_LENGTH <= len(plain) <= PASSWORD_MAX_LENGTH):
+        return False
+    cats = sum([
+        any(c.isdigit() for c in plain),
+        any(c.isupper() for c in plain),
+        any(c.islower() for c in plain),
+        any(not c.isalnum() for c in plain),
+    ])
+    return cats >= 3
 
 
 def _now_utc() -> datetime:

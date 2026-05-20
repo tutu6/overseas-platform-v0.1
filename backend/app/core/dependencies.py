@@ -32,6 +32,7 @@ class OrganizationInfo:
     id: int
     name: str
     is_owner: bool
+    status: str | None = None
 
 
 @dataclass
@@ -87,7 +88,8 @@ async def _load_organization(
         if record:
             member, org = record
             return OrganizationInfo(
-                type="BUYER_ORG", id=org.id, name=org.name, is_owner=member.is_owner
+                type="BUYER_ORG", id=org.id, name=org.name,
+                is_owner=member.is_owner, status=org.status,
             )
     if "SUPPLIER" in role_codes:
         row = await db.execute(
@@ -100,7 +102,8 @@ async def _load_organization(
         if record:
             member, org = record
             return OrganizationInfo(
-                type="SUPPLIER_ORG", id=org.id, name=org.name, is_owner=member.is_owner
+                type="SUPPLIER_ORG", id=org.id, name=org.name,
+                is_owner=member.is_owner, status=org.status,
             )
     return None
 

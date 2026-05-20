@@ -3,21 +3,24 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from app.audit.constants import AuditAction, AuditResourceType
 from app.audit.logger import write_audit
+from app.constants.country_registration import DUPLICATE_REGISTRATION_ERROR_MESSAGE
 from app.core.exceptions import (
     AccountDisabledError,
     ConflictError,
     InvalidCredentialsError,
     NotFoundError,
+    SupplierAlreadyRegisteredError,
     TooManyAttemptsError,
     ValidationFailedError,
 )
 from app.core.security import (
+    PASSWORD_RULE_MESSAGE,
     create_access_token,
     create_refresh_token,
     hash_password,
@@ -109,7 +112,7 @@ async def register_buyer(
       DB 中已存在的名字不一致,记 warn 日志后采用 DB 中已有名字(不阻断)
     """
     if not validate_password_strength(password):
-        raise ValidationFailedError("密码不符合规则(8-32 位,至少 1 字母 1 数字)")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
     if await _email_exists(db, email):
         raise ConflictError("Email 已存在")
     if username and await _username_exists(db, username):
@@ -201,45 +204,53 @@ async def register_supplier(
     *,
     email: str,
     name: str,
-    phone: str | None,
+    phone: str,
     password: str,
     company_name: str,
-    business_license_no: str,
-    username: str | None = None,
+    country_code: str,
+    registration_no: str,
+    language_preference: str,
     request: Request | None = None,
 ) -> User:
+    """供应商自助注册(PRD v1.3 §4.3)。
+
+    唯一性按 (country_code, registration_no) 复合判定;不同国家可撞号。
+    重复时抛 409 + 标准化文案,不暴露已有 owner / 公司名 / 任何字段。
+    """
     if not validate_password_strength(password):
-        raise ValidationFailedError("密码不符合规则(8-32 位,至少 1 字母 1 数字)")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
     if await _email_exists(db, email):
         raise ConflictError("Email 已存在")
-    if username and await _username_exists(db, username):
-        raise ConflictError("用户名已存在")
     if phone and await _phone_exists(db, phone):
         raise ConflictError("手机号已存在")
-    # 营业执照唯一校验
+    # 复合唯一性校验:同 country + 同 reg_no 才算重复
     row = await db.execute(
         select(SupplierOrganization.id).where(
-            SupplierOrganization.business_license_no == business_license_no
+            and_(
+                SupplierOrganization.country_code == country_code,
+                SupplierOrganization.registration_no == registration_no,
+            )
         )
     )
     if row.scalar_one_or_none() is not None:
-        raise ConflictError("该供应商已在平台注册。如需加入该企业,请联系企业管理员。")
+        raise SupplierAlreadyRegisteredError(DUPLICATE_REGISTRATION_ERROR_MESSAGE)
 
     user = User(
         email=email,
-        username=username,
         name=name,
         phone=phone,
         password_hash=hash_password(password),
         status=UserStatus.ACTIVE,
         must_change_password=False,
+        language_preference=language_preference,
     )
     db.add(user)
     await db.flush()
 
     org = SupplierOrganization(
         name=company_name,
-        business_license_no=business_license_no,
+        country_code=country_code,
+        registration_no=registration_no,
         status="DRAFT",
     )
     db.add(org)
@@ -257,7 +268,12 @@ async def register_supplier(
         user_email=user.email,
         resource_id=user.id,
         request=request,
-        extra={"role": RoleCode.SUPPLIER, "supplier_org_id": org.id},
+        extra={
+            "role": RoleCode.SUPPLIER,
+            "supplier_org_id": org.id,
+            "country_code": country_code,
+            "language_preference": language_preference,
+        },
         commit=False,
     )
     await db.commit()
@@ -368,7 +384,7 @@ async def change_password(
         )
         raise InvalidCredentialsError("旧密码错误")
     if not validate_password_strength(new_password):
-        raise ValidationFailedError("新密码不符合规则")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
 
     user.password_hash = hash_password(new_password)
     user.must_change_password = False

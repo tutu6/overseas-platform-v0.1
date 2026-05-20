@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Super admin 种子(始终种入,生产唯一保留)
     SUPER_ADMIN_EMAIL: str = "superadmin@platform.local"
-    SUPER_ADMIN_INITIAL_PASSWORD: str = "ChangeMe123"
+    SUPER_ADMIN_INITIAL_PASSWORD: str = "Aa123456789"
 
     # demo seed 开关:控制是否种入中建三局 BuyerOrg 与 admin/operator/buyer demo 账号
     # 本地开发推荐 true;**生产部署务必 false**

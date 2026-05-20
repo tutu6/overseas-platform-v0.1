@@ -60,12 +60,13 @@ async def register_supplier(
     user = await auth_service.register_supplier(
         db,
         email=body.email,
-        username=body.username,
         name=body.name,
         phone=body.phone,
         password=body.password,
         company_name=body.company_name,
-        business_license_no=body.business_license_no,
+        country_code=body.country_code,
+        registration_no=body.registration_no,
+        language_preference=body.language_preference,
         request=request,
     )
     return success(RegisterOut(user_id=user.id, email=user.email).model_dump())

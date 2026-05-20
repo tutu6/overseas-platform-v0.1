@@ -14,7 +14,7 @@ def _payload(*, email="a@cscec3b.com", username=None, phone=None,
     p = {
         "email": email,
         "name": "Alice",
-        "password": "Abcd1234",
+        "password": "Aa123456789",
         "company_name": company_name,
         "unified_social_credit_code": usc,
     }

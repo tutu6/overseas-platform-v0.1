@@ -115,7 +115,7 @@ async def seed_demo_internal_accounts(db: AsyncSession) -> None:
         email="admin@platform.local",
         username="admin",
         name="演示管理员",
-        password="12345678a",
+        password="Aa123456789",
         role_code=RoleCode.ADMIN,
     )
     await _seed_internal_account(
@@ -123,7 +123,7 @@ async def seed_demo_internal_accounts(db: AsyncSession) -> None:
         email="operator@platform.local",
         username="operator",
         name="演示运营",
-        password="12345678a",
+        password="Aa123456789",
         role_code=RoleCode.OPERATOR,
     )
 
@@ -163,7 +163,7 @@ async def seed_demo_buyer_account(db: AsyncSession) -> None:
         email=email,
         username=username,
         name="演示采购员",
-        password_hash=hash_password("12345678a"),
+        password_hash=hash_password("Aa123456789"),
         status=UserStatus.ACTIVE,
         must_change_password=False,
     )

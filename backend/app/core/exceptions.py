@@ -63,6 +63,20 @@ class ConflictError(BusinessError):
         super().__init__(status.HTTP_409_CONFLICT, 40009, message)
 
 
+class SupplierAlreadyRegisteredError(BusinessError):
+    """供应商重复入驻(PRD v1.4 Δ9)。
+
+    code=40901(数字),前端识别错误必须用数字比较,严禁字符串比较异常类名。
+    message 沿用 PRD v1.3 §5.3 标准化文案,不暴露 owner / 公司名。
+    """
+
+    def __init__(
+        self,
+        message: str = "当前企业已在平台注册。如需加入,请联系您所在企业的平台管理员添加账号。",
+    ):
+        super().__init__(status.HTTP_409_CONFLICT, 40901, message)
+
+
 class NotFoundError(BusinessError):
     def __init__(self, message: str = "Not found"):
         super().__init__(status.HTTP_404_NOT_FOUND, 40400, message)

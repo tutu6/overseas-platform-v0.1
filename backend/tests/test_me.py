@@ -12,7 +12,7 @@ REG_PAYLOAD = {
     "username": "alice",
     "name": "Alice",
     "phone": "13800138000",
-    "password": "Abcd1234",
+    "password": "Aa123456789",
     "company_name": "中建三局",
     "unified_social_credit_code": "91420100MA4KXXXX01",
 }
