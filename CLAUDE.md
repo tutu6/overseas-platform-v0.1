@@ -325,7 +325,11 @@ pnpm lint                  # ESLint
 cp .env.production.example .env.production    # 填实际值
 docker compose --env-file .env.production up -d --build
 
-# 部署:平时直接 git push origin main(GitHub Actions 自动跑)
+# 部署:手动触发(代码提交 / 合并 main 不会自动部署)
+gh workflow run "Deploy to ECS"               # 推荐:命令行一条
+gh run watch                                  # 查看进度
+# 或网页:GitHub Actions tab → "Deploy to ECS" → Run workflow
+
 # 应急:SSH 到 ECS 手动跑
 ssh user@<ECS-IP>
 cd /opt/overseas-platform && bash deploy/deploy.sh
@@ -361,14 +365,14 @@ gunzip -c backup.sql.gz | docker compose exec -T db psql -U "$POSTGRES_USER" -d 
 | `backend/docker-entrypoint.sh` | 等 DB → alembic upgrade → 启动应用(lifespan 自动跑 seed) |
 | `deploy/deploy.sh` | ECS 上由 CI 触发的部署脚本 |
 | `deploy/check-migration-safety.sh` | CI 拦截破坏性迁移 |
-| `.github/workflows/deploy.yml` | push main → 自动部署 |
+| `.github/workflows/deploy.yml` | 手动触发(workflow_dispatch),代码合 main 不会自动部署 |
 | `.env.production` | ECS 上维护,**不入 Git** |
 | `.env.production.example` | 入 Git 的模板 |
 
 ### 部署触发链路
 
 ```
-本地 git push origin main
+你手动触发(gh workflow run "Deploy to ECS" 或网页点 Run)
       ↓
 GitHub Actions:check-migration → SSH 到 ECS → bash deploy/deploy.sh
       ↓
@@ -499,7 +503,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | Q25 | ADMIN 能否访问业务数据 | 严格分离 |
 | Q26 | super admin 密码策略 | 环境变量注入 + 强制改密 |
 | Q27 | 何时切换 PostgreSQL | ✅ **已切**(2026-05-18,brew @16 端口 5433) |
-| Q28 | 是否容器化部署 | ✅ **已切**(2026-05-20,Docker compose + GitHub Actions 自动部署,详见「部署架构」) |
+| Q28 | 是否容器化部署 | ✅ **已切**(2026-05-20,Docker compose + GitHub Actions 手动触发部署,详见「部署架构」) |
 
 完整待定点列表见 `docs/RBAC与组织架构设计讨论_v1.2.md` 和 `docs/MVP业务流程共识_v1.2.md`。
 

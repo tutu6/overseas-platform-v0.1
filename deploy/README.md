@@ -1,10 +1,22 @@
 # 部署指南
 
-## 平时部署(零操作)
+## 平时部署(手动一键触发)
 
-`git push origin main` → GitHub Actions 自动跑 → ECS 自动部署完成。
+**代码提交 / 合并 main 不会自动部署**,代码与部署解耦。
 
-查看进度:GitHub repo → Actions tab。
+部署只在你明确触发时执行,任选一种方式:
+
+```bash
+# 命令行:本地一条命令
+gh workflow run "Deploy to ECS" --repo tutu6/overseas-platform-v0.1
+
+# 查看部署进度
+gh run watch
+```
+
+或者打开 GitHub repo → **Actions** → 左边选 "Deploy to ECS" → 右上角 **Run workflow** → 选 main 分支 → 点 Run。
+
+部署过程同前:Actions 跑 → SSH 到 ECS → `bash deploy/deploy.sh`(备份 → git pull → up --build → 健康检查)。
 
 ---
 
@@ -129,7 +141,7 @@ docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > ba
 
 ## 应急
 
-### 自动部署失败 → 手动 SSH 重跑
+### 部署失败 → 手动 SSH 重跑
 
 ```bash
 ssh user@<ECS-IP>

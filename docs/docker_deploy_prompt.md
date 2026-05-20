@@ -1,4 +1,9 @@
-# Docker 化部署:本地 + ECS 一键自动部署
+# Docker 化部署:本地 + ECS 一键部署
+
+> **设计修订(2026-05-20)**:经讨论,部署改为**手动触发**(workflow_dispatch),
+> 代码提交 / 合并 main 不自动部署。原因:代码与部署解耦,部署时机由人控制。
+> 本文档以下章节保留原"push 即部署"措辞,实施时以 `.github/workflows/deploy.yml`
+> 和 `deploy/README.md` 为准。
 
 ## 背景
 
