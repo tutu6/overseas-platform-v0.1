@@ -7,9 +7,10 @@
 # ============= deps =============
 FROM node:20.18-alpine AS deps
 
-# 淘宝 npm 镜像(国内拉包必备)+ 锁定 pnpm 版本
+# Alpine 镜像源换阿里云 + 淘宝 npm 镜像 + 锁定 pnpm 版本
 # 严禁 pnpm@latest(昨天踩过 ERR_UNKNOWN_BUILTIN_MODULE)
-RUN npm config set registry https://registry.npmmirror.com \
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|https://mirrors.aliyun.com|g' /etc/apk/repositories \
+    && npm config set registry https://registry.npmmirror.com \
     && corepack enable \
     && corepack prepare pnpm@9.15.0 --activate
 
@@ -22,7 +23,8 @@ RUN pnpm config set registry https://registry.npmmirror.com \
 # ============= builder =============
 FROM node:20.18-alpine AS builder
 
-RUN npm config set registry https://registry.npmmirror.com \
+RUN sed -i 's|https://dl-cdn.alpinelinux.org|https://mirrors.aliyun.com|g' /etc/apk/repositories \
+    && npm config set registry https://registry.npmmirror.com \
     && corepack enable \
     && corepack prepare pnpm@9.15.0 --activate
 
@@ -43,10 +45,9 @@ FROM node:20.18-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# 非 root 用户 + healthcheck 用的 wget
+# 非 root 用户(不装额外包,健康检查用 Node 自带 fetch)
 RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 nextjs \
-    && apk add --no-cache wget
+    && adduser --system --uid 1001 nextjs
 
 # Next.js standalone 输出:server.js + 最小 node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -60,7 +61,8 @@ EXPOSE 3000
 ENV PORT=3000 \
     HOSTNAME=0.0.0.0
 
+# 健康检查用 Node 自带 fetch(Node 18+ 内置),避免装 wget/curl
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:3000 > /dev/null || exit 1
+    CMD node -e "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 CMD ["node", "server.js"]
