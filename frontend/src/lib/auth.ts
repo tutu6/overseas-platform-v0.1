@@ -1,5 +1,6 @@
 // 认证相关类型与 API 调用。
 
+import type { CountryCode, LanguageCode } from "@/config/country-registration-rules";
 import { api } from "./api";
 
 export type RoleCode = "BUYER" | "SUPPLIER" | "OPERATOR" | "ADMIN";
@@ -9,6 +10,8 @@ export interface OrganizationInfo {
   id: number;
   name: string;
   is_owner: boolean;
+  /** SupplierOrg.status / BuyerOrg.status,前端 dashboard banner 显示判定用 */
+  status?: string | null;
 }
 
 export interface MeData {
@@ -22,6 +25,8 @@ export interface MeData {
   roles: RoleCode[];
   permissions: string[];
   organization: OrganizationInfo | null;
+  /** 用户语言偏好(SUPPLIER 注册时写入,其他场景为 null;TODO(T-LANG-CHANGE) 自助切换入口) */
+  language_preference?: string | null;
 }
 
 export interface LoginResult {
@@ -35,12 +40,14 @@ export interface LoginResult {
 export const authApi = {
   registerSupplier: (payload: {
     email: string;
-    username?: string;
     name: string;
-    phone?: string;
+    /** SUPPLIER 注册 phone 必填(PRD v1.3 §2.2) */
+    phone: string;
     password: string;
     company_name: string;
-    business_license_no: string;
+    country_code: CountryCode;
+    registration_no: string;
+    language_preference: LanguageCode;
   }) =>
     api.post<{ user_id: number; email: string }>(
       "/api/v1/auth/register/supplier",

@@ -1,8 +1,14 @@
 // 集中前端字段校验规则。后端规则在 schemas/auth.py 与 schemas/me.py。
 // 返回 null = 通过;返回字符串 = 错误文案。
 
+import { getCountryByCode } from "@/config/country-registration-rules";
+
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// 中国大陆手机号严格规则(BUYER 注册仍用)
 export const PHONE_RE = /^1[3-9]\d{9}$/;
+// SUPPLIER 注册占位规则:6-20 位,允许 +、数字、空格、短横(覆盖各国常见格式)
+// TODO(I18N-PHONE):各国 phone 精确规则待补,本轮宽校验
+export const SUPPLIER_PHONE_RE = /^[+0-9\s\-]{6,20}$/;
 // 与后端 USERNAME_REGEX 等价:3-50 位字母/数字/下划线/短横,不能纯数字
 export const USERNAME_RE = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
 // 18 位大写字母 + 数字(国标 GB 32100-2015)
@@ -57,5 +63,26 @@ export function validatePasswordConfirm(pwd: string, confirm: string): string | 
 
 export function validateRequired(v: string, label = "此项"): string | null {
   if (!v.trim()) return `${label}不能为空`;
+  return null;
+}
+
+/** SUPPLIER 注册手机号:占位规则,TODO(I18N-PHONE)各国精确规则待补。 */
+export function validateSupplierPhone(v: string): string | null {
+  if (!v) return "请填写联系电话";
+  if (!SUPPLIER_PHONE_RE.test(v))
+    return "联系电话格式不正确(6-20 位,允许 +、数字、空格、短横)";
+  return null;
+}
+
+/** 按国家分发凭证号校验:用 `country-registration-rules.ts` 的占位 regex。TODO(REG-RULE) 各国精确规则待补。 */
+export function validateRegistrationNoByCountry(
+  countryCode: string,
+  value: string,
+): string | null {
+  if (!value) return "请填写注册号";
+  const country = getCountryByCode(countryCode);
+  if (!country) return "请先选择国家";
+  if (!country.regNo.regex.test(value))
+    return `${country.regNo.label}格式不正确(${country.regNo.hint})`;
   return null;
 }
