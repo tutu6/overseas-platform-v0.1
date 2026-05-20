@@ -2,6 +2,11 @@
   "name": "overseas-supply-frontend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.10",
+    "pnpm": ">=9"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
