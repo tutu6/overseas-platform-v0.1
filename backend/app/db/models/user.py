@@ -24,3 +24,5 @@ class User(Base, TimestampUpdateMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=UserStatus.ACTIVE)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # 用户语言偏好(本轮仅 SUPPLIER 自助注册 Step 2 写入,其他场景为 NULL;TODO(T-LANG-CHANGE) 用户自助切换入口)
+    language_preference: Mapped[str | None] = mapped_column(String(10), nullable=True)
