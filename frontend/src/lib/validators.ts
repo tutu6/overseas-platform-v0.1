@@ -13,8 +13,13 @@ export const SUPPLIER_PHONE_RE = /^[+0-9\s\-]{6,20}$/;
 export const USERNAME_RE = /^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$/;
 // 18 位大写字母 + 数字(国标 GB 32100-2015)
 export const USC_RE = /^[0-9A-Z]{18}$/;
-// 与后端 validate_password_strength 等价:8-32 位,至少 1 字母 + 1 数字
-export const PASSWORD_RE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&^_\-]{8,32}$/;
+// 与后端 validate_password_strength 等价(PRD v1.4 Δ1):
+// 11-50 位 + 数字/大写/小写/特殊字符(任何非字母数字)4 类中至少 3 类
+export const PASSWORD_MIN_LENGTH = 11;
+export const PASSWORD_MAX_LENGTH = 50;
+// 错误文案与后端 PASSWORD_RULE_MESSAGE 逐字一致
+export const PASSWORD_RULE_MESSAGE =
+  "密码 11-50 位,需包含数字、大写字母、小写字母、特殊字符中至少 3 类";
 
 export function validateEmail(v: string): string | null {
   if (!v) return "请填写邮箱";
@@ -51,7 +56,15 @@ export function validateUsc(v: string): string | null {
 
 export function validatePassword(v: string): string | null {
   if (!v) return "请填写密码";
-  if (!PASSWORD_RE.test(v)) return "密码 8-32 位,至少包含 1 个字母与 1 个数字";
+  if (v.length < PASSWORD_MIN_LENGTH || v.length > PASSWORD_MAX_LENGTH)
+    return PASSWORD_RULE_MESSAGE;
+  // 4 类字符:数字 / 大写 / 小写 / 特殊(任何非字母数字)
+  const cats =
+    (/\d/.test(v) ? 1 : 0) +
+    (/[A-Z]/.test(v) ? 1 : 0) +
+    (/[a-z]/.test(v) ? 1 : 0) +
+    (/[^A-Za-z0-9]/.test(v) ? 1 : 0);
+  if (cats < 3) return PASSWORD_RULE_MESSAGE;
   return null;
 }
 

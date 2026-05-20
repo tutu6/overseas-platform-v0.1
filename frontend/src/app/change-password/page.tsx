@@ -90,7 +90,7 @@ function Inner() {
             <PwdField
               id="newPwd"
               label="新密码"
-              hint="8-32 位,含字母与数字"
+              hint="11-50 位,需 3 类字符"
               value={newPwd}
               onChange={(v) => {
                 setNewPwd(v);

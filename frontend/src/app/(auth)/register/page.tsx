@@ -471,7 +471,7 @@ function BuyerForm({ onSubmitted }: BuyerFormProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="password" className="text-sm font-semibold text-gray-700">
-            密码 * <span className="font-normal text-gray-400">(8-32 位,含字母与数字)</span>
+            密码 * <span className="font-normal text-gray-400">(11-50 位,需 3 类字符)</span>
           </Label>
           <div className="relative">
             <input

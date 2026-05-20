@@ -10,7 +10,7 @@ from app.constants.country_registration import (
     LANGUAGE_CODES,
     REGISTRATION_NO_MAX_LENGTH,
 )
-from app.core.security import validate_password_strength
+from app.core.security import PASSWORD_RULE_MESSAGE, validate_password_strength
 
 
 # 用户名规则:3-50 位,字母/数字/下划线/短横,不能纯数字
@@ -28,7 +28,7 @@ SUPPLIER_PHONE_REGEX = re.compile(r"^[+0-9\s\-]{6,20}$")
 
 def _validate_password(v: str) -> str:
     if not validate_password_strength(v):
-        raise ValueError("密码长度 8-32 位,至少包含 1 个字母和 1 个数字")
+        raise ValueError(PASSWORD_RULE_MESSAGE)
     return v
 
 
@@ -156,7 +156,7 @@ class ChangePasswordIn(BaseModel):
     @classmethod
     def _check_new(cls, v: str) -> str:
         if not validate_password_strength(v):
-            raise ValueError("新密码长度 8-32 位,至少包含 1 个字母和 1 个数字")
+            raise ValueError(PASSWORD_RULE_MESSAGE)
         return v
 
 

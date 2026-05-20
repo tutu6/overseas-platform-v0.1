@@ -60,23 +60,23 @@ async def _buyer_token(client):
         json={
             "email": "buyer.scope@x.com",
             "name": "B",
-            "password": "Abcd1234",
+            "password": "Aa123456789",
             "company_name": "中建三局",
             "unified_social_credit_code": "91420100MA4KXXXX01",
         },
     )
-    return await _login(client, "buyer.scope@x.com", "Abcd1234")
+    return await _login(client, "buyer.scope@x.com", "Aa123456789")
 
 
 async def _supplier_token(client):
     await client.post(
         "/api/v1/auth/register/supplier",
         json={"email": "sup.scope@x.com", "name": "S", "phone": "13900139501",
-              "password": "Abcd1234", "company_name": "S Co",
+              "password": "Aa123456789", "company_name": "S Co",
               "country_code": "CN", "registration_no": "SC-1",
               "language_preference": "zh"},
     )
-    return await _login(client, "sup.scope@x.com", "Abcd1234")
+    return await _login(client, "sup.scope@x.com", "Aa123456789")
 
 
 @pytest.mark.asyncio

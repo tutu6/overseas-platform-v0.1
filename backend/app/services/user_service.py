@@ -9,7 +9,7 @@ from app.audit.constants import AuditAction, AuditResourceType
 from app.audit.logger import write_audit
 from app.core.config import settings
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailedError
-from app.core.security import hash_password, validate_password_strength
+from app.core.security import PASSWORD_RULE_MESSAGE, hash_password, validate_password_strength
 from app.db.models.permission import Permission  # noqa: F401  (确保 metadata 注册)
 from app.db.models.role import Role, RoleCode
 from app.db.models.user import User, UserStatus
@@ -37,7 +37,7 @@ async def create_internal_user(
             f"该接口仅允许创建 {sorted(ALLOWED_INTERNAL_ROLES)},BUYER/SUPPLIER 请走自助注册"
         )
     if not validate_password_strength(password):
-        raise ValidationFailedError("密码不符合规则(8-32 位,至少 1 字母 1 数字)")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
     row = await db.execute(select(User.id).where(User.email == email))
     if row.scalar_one_or_none() is not None:
         raise ConflictError("Email 已存在")

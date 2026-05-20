@@ -10,7 +10,7 @@ BUYER_PAYLOAD = {
     "email": "zhang@cscec3b.com",
     "name": "张三",
     "phone": "13800138000",
-    "password": "Abcd1234",
+    "password": "Aa123456789",
     # 与 seed 的中建三局 USC 一致 → 注册时加入该组织,不新建
     "company_name": "中建三局",
     "unified_social_credit_code": "91420100MA4KXXXX01",
@@ -20,7 +20,7 @@ SUPPLIER_PAYLOAD = {
     "email": "li@huajian.com",
     "name": "李四",
     "phone": "13800138001",
-    "password": "Abcd1234",
+    "password": "Aa123456789",
     "company_name": "华建供应链有限公司",
     "country_code": "CN",
     "registration_no": "91110000XXXXXXXXXX",
@@ -55,6 +55,36 @@ async def test_buyer_register_weak_password(client):
     bad = {**BUYER_PAYLOAD, "password": "abc"}
     r = await client.post("/api/v1/auth/register/buyer", json=bad)
     assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_password_length_below_11_rejected(client):
+    """密码 < 11 位被拒(PRD v1.4 Δ1:11-50 位)。"""
+    bad = {**BUYER_PAYLOAD, "password": "Aa12345"}  # 7 位
+    r = await client.post("/api/v1/auth/register/buyer", json=bad)
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_password_3_categories_required(client):
+    """密码长度合规但只 1 类字符 → 拒绝(PRD v1.4 Δ1:11-50 + 3 类)。"""
+    # 11 位但只有小写一类
+    bad1 = {**BUYER_PAYLOAD, "password": "aaaaaaaaaaa"}
+    r1 = await client.post("/api/v1/auth/register/buyer", json=bad1)
+    assert r1.status_code == 422, r1.text
+
+    # 11 位但只有 2 类(小写 + 数字)
+    bad2 = {**BUYER_PAYLOAD, "email": "x2@y.com", "password": "abcdefg1234"}
+    r2 = await client.post("/api/v1/auth/register/buyer", json=bad2)
+    assert r2.status_code == 422, r2.text
+
+
+@pytest.mark.asyncio
+async def test_password_3_categories_passes(client):
+    """密码 11 位 + 3 类(数字 + 大写 + 小写)→ 通过。"""
+    ok = {**BUYER_PAYLOAD, "email": "ok@y.com", "password": "Aa123456789"}
+    r = await client.post("/api/v1/auth/register/buyer", json=ok)
+    assert r.status_code == 200, r.text
 
 
 @pytest.mark.asyncio
@@ -182,7 +212,7 @@ async def test_login_wrong_password(client):
 
 @pytest.mark.asyncio
 async def test_login_unknown_email(client):
-    r = await _login(client, "ghost@nowhere.com", "Abcd1234")
+    r = await _login(client, "ghost@nowhere.com", "Aa123456789")
     assert r.status_code == 401
     assert r.json()["code"] == 40001
 
@@ -312,7 +342,7 @@ async def test_register_invalid_username(client):
 
 @pytest.mark.asyncio
 async def test_login_unknown_username(client):
-    r = await _login(client, "no_such_user", "Abcd1234")
+    r = await _login(client, "no_such_user", "Aa123456789")
     assert r.status_code == 401
 
 

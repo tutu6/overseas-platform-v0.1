@@ -23,7 +23,7 @@ async def _admin_token(client) -> str:
 
 
 async def _create(client, token: str, *, email: str, role: str = "OPERATOR",
-                  username: str | None = None, password: str = "Abcd1234") -> int:
+                  username: str | None = None, password: str = "Aa123456789") -> int:
     body = {"email": email, "name": email.split("@")[0], "password": password,
             "role": role, "must_change_password": False}
     if username:
@@ -53,7 +53,7 @@ async def test_disable_then_enable_operator(client):
 
     # 停用后该账号不能登录(401 / 403,看实现)
     bad = await client.post(
-        "/api/v1/auth/login", json={"identifier": "op1@x.com", "password": "Abcd1234"}
+        "/api/v1/auth/login", json={"identifier": "op1@x.com", "password": "Aa123456789"}
     )
     assert bad.status_code in (401, 403)
 
@@ -67,7 +67,7 @@ async def test_disable_then_enable_operator(client):
 
     # 启用后可登录
     ok = await client.post(
-        "/api/v1/auth/login", json={"identifier": "op1@x.com", "password": "Abcd1234"}
+        "/api/v1/auth/login", json={"identifier": "op1@x.com", "password": "Aa123456789"}
     )
     assert ok.status_code == 200
 
@@ -112,7 +112,7 @@ async def test_cannot_disable_super_admin(client):
     other_admin_id = await _create(
         client, super_token, email="another_admin@x.com", role="ADMIN"
     )
-    token = await _login(client, "another_admin@x.com", "Abcd1234")
+    token = await _login(client, "another_admin@x.com", "Aa123456789")
 
     # super admin id
     me = await client.get(
@@ -160,7 +160,7 @@ async def test_cannot_disable_last_admin(client):
     token = await _admin_token(client)
     # 找 demo admin id
     me_admin = await client.post(
-        "/api/v1/auth/login", json={"identifier": "admin", "password": "12345678a"}
+        "/api/v1/auth/login", json={"identifier": "admin", "password": "Aa123456789"}
     )
     assert me_admin.status_code == 200
     admin_token = me_admin.json()["data"]["access_token"]
@@ -185,7 +185,7 @@ async def test_operator_cannot_disable(client):
     super_token = await _admin_token(client)
     a_id = await _create(client, super_token, email="opvictim@x.com")
     b_id = await _create(client, super_token, email="opactor@x.com")
-    op_token = await _login(client, "opactor@x.com", "Abcd1234")
+    op_token = await _login(client, "opactor@x.com", "Aa123456789")
 
     r = await client.post(
         f"/api/v1/admin/users/{a_id}/disable",

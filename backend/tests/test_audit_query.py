@@ -27,7 +27,7 @@ async def _admin_h(client):
 @pytest.mark.asyncio
 async def test_audit_logs_requires_system_audit(client):
     # OPERATOR 无 system:audit
-    op_token = await _login(client, "operator@platform.local", "12345678a")
+    op_token = await _login(client, "operator@platform.local", "Aa123456789")
     r = await client.get(
         "/api/v1/admin/audit-logs",
         headers={"Authorization": f"Bearer {op_token}"},
@@ -50,7 +50,7 @@ async def test_list_audit_logs_basic(client):
     await client.post(
         "/api/v1/auth/register/buyer",
         json={
-            "email": "audit_q@x.com", "name": "X", "password": "Abcd1234",
+            "email": "audit_q@x.com", "name": "X", "password": "Aa123456789",
             "company_name": "中建三局",
             "unified_social_credit_code": "91420100MA4KXXXX01",
         },
@@ -93,7 +93,7 @@ async def test_filter_by_user_email_ilike(client):
     await client.post(
         "/api/v1/auth/register/buyer",
         json={
-            "email": "uniquemail@cscec3b.com", "name": "U", "password": "Abcd1234",
+            "email": "uniquemail@cscec3b.com", "name": "U", "password": "Aa123456789",
             "company_name": "中建三局",
             "unified_social_credit_code": "91420100MA4KXXXX01",
         },
@@ -113,7 +113,7 @@ async def test_filter_by_trace_id(client):
     reg = await client.post(
         "/api/v1/auth/register/buyer",
         json={
-            "email": "tracefilter@x.com", "name": "T", "password": "Abcd1234",
+            "email": "tracefilter@x.com", "name": "T", "password": "Aa123456789",
             "company_name": "中建三局",
             "unified_social_credit_code": "91420100MA4KXXXX01",
         },

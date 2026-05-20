@@ -19,6 +19,7 @@ from app.core.exceptions import (
     ValidationFailedError,
 )
 from app.core.security import (
+    PASSWORD_RULE_MESSAGE,
     create_access_token,
     create_refresh_token,
     hash_password,
@@ -110,7 +111,7 @@ async def register_buyer(
       DB 中已存在的名字不一致,记 warn 日志后采用 DB 中已有名字(不阻断)
     """
     if not validate_password_strength(password):
-        raise ValidationFailedError("密码不符合规则(8-32 位,至少 1 字母 1 数字)")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
     if await _email_exists(db, email):
         raise ConflictError("Email 已存在")
     if username and await _username_exists(db, username):
@@ -216,7 +217,7 @@ async def register_supplier(
     重复时抛 409 + 标准化文案,不暴露已有 owner / 公司名 / 任何字段。
     """
     if not validate_password_strength(password):
-        raise ValidationFailedError("密码不符合规则(8-32 位,至少 1 字母 1 数字)")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
     if await _email_exists(db, email):
         raise ConflictError("Email 已存在")
     if phone and await _phone_exists(db, phone):
@@ -382,7 +383,7 @@ async def change_password(
         )
         raise InvalidCredentialsError("旧密码错误")
     if not validate_password_strength(new_password):
-        raise ValidationFailedError("新密码不符合规则")
+        raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
 
     user.password_hash = hash_password(new_password)
     user.must_change_password = False

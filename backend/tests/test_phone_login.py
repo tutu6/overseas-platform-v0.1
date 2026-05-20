@@ -8,7 +8,7 @@ def _buyer_payload(*, email, phone=None, usc="91110000PHONETEST1"):
     p = {
         "email": email,
         "name": "P",
-        "password": "Abcd1234",
+        "password": "Aa123456789",
         "company_name": "Phone 测试公司",
         "unified_social_credit_code": usc,
     }
@@ -24,7 +24,7 @@ async def _register(client, **overrides):
     return p
 
 
-async def _login(client, identifier, password="Abcd1234"):
+async def _login(client, identifier, password="Aa123456789"):
     return await client.post(
         "/api/v1/auth/login", json={"identifier": identifier, "password": password}
     )
@@ -95,7 +95,7 @@ async def test_login_audit_marks_phone_identifier(client, db_session):
 
 # ---------- 改手机号 POST /auth/me/phone ----------
 
-async def _login_token(client, identifier, password="Abcd1234"):
+async def _login_token(client, identifier, password="Aa123456789"):
     r = await _login(client, identifier, password)
     assert r.status_code == 200
     return r.json()["data"]["access_token"]
@@ -109,7 +109,7 @@ async def test_change_phone_success(client):
 
     r = await client.post(
         "/api/v1/auth/me/phone",
-        json={"new_phone": "13955550011", "current_password": "Abcd1234"},
+        json={"new_phone": "13955550011", "current_password": "Aa123456789"},
         headers=h,
     )
     assert r.status_code == 200, r.text
@@ -143,7 +143,7 @@ async def test_change_phone_conflict(client):
     token = await _login_token(client, "a@x.com")
     r = await client.post(
         "/api/v1/auth/me/phone",
-        json={"new_phone": "13955550021", "current_password": "Abcd1234"},
+        json={"new_phone": "13955550021", "current_password": "Aa123456789"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 409
@@ -155,7 +155,7 @@ async def test_change_phone_clear_then_cannot_login_by_phone(client):
     token = await _login_token(client, "clr@x.com")
     r = await client.post(
         "/api/v1/auth/me/phone",
-        json={"new_phone": None, "current_password": "Abcd1234"},
+        json={"new_phone": None, "current_password": "Aa123456789"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 200
@@ -171,7 +171,7 @@ async def test_change_phone_invalid_format(client):
     token = await _login_token(client, "cpf@x.com")
     r = await client.post(
         "/api/v1/auth/me/phone",
-        json={"new_phone": "1234", "current_password": "Abcd1234"},
+        json={"new_phone": "1234", "current_password": "Aa123456789"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 422
@@ -186,7 +186,7 @@ async def test_change_phone_audit_recorded(client, db_session):
     token = await _login_token(client, "cpa@x.com")
     await client.post(
         "/api/v1/auth/me/phone",
-        json={"new_phone": "13955550051", "current_password": "Abcd1234"},
+        json={"new_phone": "13955550051", "current_password": "Aa123456789"},
         headers={"Authorization": f"Bearer {token}"},
     )
     row = await db_session.execute(

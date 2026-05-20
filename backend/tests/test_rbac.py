@@ -26,13 +26,13 @@ async def _register_buyer(client, email="buyer1@cscec3b.com"):
         "email": email,
         "name": "Buyer 1",
         "phone": "13800138000",
-        "password": "Abcd1234",
+        "password": "Aa123456789",
         "company_name": "中建三局",
         "unified_social_credit_code": "91420100MA4KXXXX01",
     }
     r = await client.post("/api/v1/auth/register/buyer", json=payload)
     assert r.status_code == 200, r.text
-    return email, "Abcd1234"
+    return email, "Aa123456789"
 
 
 async def _register_supplier(client, email="supplier1@huajian.com", license_no="LIC-001"):
@@ -41,7 +41,7 @@ async def _register_supplier(client, email="supplier1@huajian.com", license_no="
         "name": "Supplier 1",
         # 与 BUYER fixture(13800138000)区分,避免撞 phone UNIQUE
         "phone": "13900139000",
-        "password": "Abcd1234",
+        "password": "Aa123456789",
         "company_name": "Huajian Co",
         "country_code": "CN",
         "registration_no": license_no,
@@ -49,7 +49,7 @@ async def _register_supplier(client, email="supplier1@huajian.com", license_no="
     }
     r = await client.post("/api/v1/auth/register/supplier", json=payload)
     assert r.status_code == 200, r.text
-    return email, "Abcd1234"
+    return email, "Aa123456789"
 
 
 async def _create_operator_via_super_admin(client, email="op1@platform.com"):
@@ -59,14 +59,14 @@ async def _create_operator_via_super_admin(client, email="op1@platform.com"):
         json={
             "email": email,
             "name": "OP 1",
-            "password": "Abcd1234",
+            "password": "Aa123456789",
             "role": "OPERATOR",
             "must_change_password": False,
         },
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 200, r.text
-    return email, "Abcd1234"
+    return email, "Aa123456789"
 
 
 @pytest.mark.asyncio
@@ -121,7 +121,7 @@ async def test_admin_create_buyer_role_rejected(client):
         json={
             "email": "fakebuyer@x.com",
             "name": "X",
-            "password": "Abcd1234",
+            "password": "Aa123456789",
             "role": "BUYER",
             "must_change_password": False,
         },
@@ -139,7 +139,7 @@ async def test_non_admin_cannot_create_user(client):
         json={
             "email": "x@x.com",
             "name": "X",
-            "password": "Abcd1234",
+            "password": "Aa123456789",
             "role": "OPERATOR",
         },
         headers={"Authorization": f"Bearer {token}"},

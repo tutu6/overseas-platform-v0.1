@@ -59,7 +59,7 @@ async def test_register_audit(client, db_session):
     await client.post(
         "/api/v1/auth/register/buyer",
         json={
-            "email": "z@cscec3b.com", "name": "Z", "password": "Abcd1234",
+            "email": "z@cscec3b.com", "name": "Z", "password": "Aa123456789",
             "company_name": "中建三局",
             "unified_social_credit_code": "91420100MA4KXXXX01",
         },
@@ -81,7 +81,7 @@ async def test_create_internal_user_audit(client, db_session):
         json={
             "email": "op@x.com",
             "name": "OP",
-            "password": "Abcd1234",
+            "password": "Aa123456789",
             "role": "OPERATOR",
         },
         headers={"Authorization": f"Bearer {token}"},
@@ -97,19 +97,19 @@ async def test_password_change_audit(client, db_session):
     await client.post(
         "/api/v1/auth/register/buyer",
         json={
-            "email": "z@cscec3b.com", "name": "Z", "password": "Abcd1234",
+            "email": "z@cscec3b.com", "name": "Z", "password": "Aa123456789",
             "company_name": "中建三局",
             "unified_social_credit_code": "91420100MA4KXXXX01",
         },
     )
     login = await client.post(
         "/api/v1/auth/login",
-        json={"identifier": "z@cscec3b.com", "password": "Abcd1234"},
+        json={"identifier": "z@cscec3b.com", "password": "Aa123456789"},
     )
     token = login.json()["data"]["access_token"]
     await client.post(
         "/api/v1/auth/change-password",
-        json={"old_password": "Abcd1234", "new_password": "NewPass1234"},
+        json={"old_password": "Aa123456789", "new_password": "NewPass1234"},
         headers={"Authorization": f"Bearer {token}"},
     )
     n, _ = await _audit_count(db_session, action="PASSWORD_CHANGE")

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.core.security import validate_password_strength
+from app.core.security import PASSWORD_RULE_MESSAGE, validate_password_strength
 
 
 class AdminUserCreateIn(BaseModel):
@@ -22,7 +22,7 @@ class AdminUserCreateIn(BaseModel):
     @classmethod
     def _check(cls, v: str) -> str:
         if not validate_password_strength(v):
-            raise ValueError("密码长度 8-32 位,至少包含 1 个字母和 1 个数字")
+            raise ValueError(PASSWORD_RULE_MESSAGE)
         return v
 
 
