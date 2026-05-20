@@ -245,9 +245,20 @@ function SupplierWizard({ draft, hydrated, update, onSubmitted }: SupplierWizard
 
   const step = draft.currentStep;
 
+  // 已完成判定:Step 1 始终可达;Step 2 需要选过国家;Step 3 需要语言也选过
+  const reachable: (1 | 2 | 3)[] = [1];
+  if (draft.country_code) reachable.push(2);
+  if (draft.country_code && draft.language_preference) reachable.push(3);
+
+  // 步骤条点击跳转(只允许跳到 reachable 里的 step)
+  const jumpToStep = (target: 1 | 2 | 3) => {
+    if (!reachable.includes(target)) return;
+    update({ currentStep: target });
+  };
+
   return (
     <>
-      <StepIndicator current={step} />
+      <StepIndicator current={step} reachable={reachable} onStepClick={jumpToStep} />
       {step === 1 && (
         <StepCountry
           selected={draft.country_code}
@@ -259,10 +270,9 @@ function SupplierWizard({ draft, hydrated, update, onSubmitted }: SupplierWizard
         <StepLanguage
           countryCode={draft.country_code}
           selected={draft.language_preference}
-          onSelect={(lang: LanguageCode) =>
-            update({ language_preference: lang, currentStep: 3 })
-          }
+          onSelect={(lang: LanguageCode) => update({ language_preference: lang })}
           onBack={() => update({ currentStep: 1 })}
+          onNext={() => update({ currentStep: 3 })}
         />
       )}
       {step === 3 && draft.country_code && draft.language_preference && (
