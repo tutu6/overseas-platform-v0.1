@@ -43,7 +43,9 @@ async def _register_supplier(client, email="supplier1@huajian.com", license_no="
         "phone": "13900139000",
         "password": "Abcd1234",
         "company_name": "Huajian Co",
-        "business_license_no": license_no,
+        "country_code": "CN",
+        "registration_no": license_no,
+        "language_preference": "zh",
     }
     r = await client.post("/api/v1/auth/register/supplier", json=payload)
     assert r.status_code == 200, r.text

@@ -5,6 +5,11 @@ import re
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.constants.country_registration import (
+    COUNTRY_CODES,
+    LANGUAGE_CODES,
+    REGISTRATION_NO_MAX_LENGTH,
+)
 from app.core.security import validate_password_strength
 
 
@@ -14,8 +19,11 @@ USERNAME_REGEX = re.compile(r"^(?![0-9]+$)[A-Za-z0-9_\-]{3,50}$")
 # 统一社会信用代码:严格 18 位,大写字母 + 数字(国标 GB 32100-2015)
 USC_REGEX = re.compile(r"^[0-9A-Z]{18}$")
 
-# 中国大陆手机号:11 位,1 开头,第二位 3-9
+# 中国大陆手机号:11 位,1 开头,第二位 3-9(BUYER 仍走严格规则)
 PHONE_REGEX = re.compile(r"^1[3-9]\d{9}$")
+
+# SUPPLIER 占位手机号规则:覆盖各国格式的弱校验,TODO(I18N-PHONE) 各国精确规则待补
+SUPPLIER_PHONE_REGEX = re.compile(r"^[+0-9\s\-]{6,20}$")
 
 
 def _validate_password(v: str) -> str:
@@ -75,28 +83,50 @@ class BuyerRegisterIn(BaseModel):
 
 
 class SupplierRegisterIn(BaseModel):
+    """供应商自助注册入参(PRD v1.3 §2.2)。
+
+    相对 BUYER:去掉 username,加 country_code / language_preference / registration_no,
+    phone 必填且走宽松占位正则(TODO(I18N-PHONE) 各国规则待补)。
+    """
+
+    # `extra='forbid'` 让多带 `username` 等未声明字段直接 422,确认入参契约
+    model_config = {"extra": "forbid"}
+
     email: EmailStr
-    username: str | None = Field(default=None, max_length=50)
     name: str = Field(..., min_length=1, max_length=100)
-    phone: str | None = Field(default=None, max_length=30)
+    phone: str = Field(..., min_length=6, max_length=20)
     password: str
     company_name: str = Field(..., min_length=1, max_length=200)
-    business_license_no: str = Field(..., min_length=1, max_length=100)
+    country_code: str = Field(..., min_length=2, max_length=2)
+    registration_no: str = Field(..., min_length=1, max_length=REGISTRATION_NO_MAX_LENGTH)
+    language_preference: str = Field(..., min_length=2, max_length=10)
 
     @field_validator("password")
     @classmethod
     def _check_pwd(cls, v: str) -> str:
         return _validate_password(v)
 
-    @field_validator("username")
-    @classmethod
-    def _check_username(cls, v: str | None) -> str | None:
-        return _validate_username_optional(v)
-
     @field_validator("phone")
     @classmethod
-    def _check_phone(cls, v: str | None) -> str | None:
-        return _validate_phone_optional(v)
+    def _check_phone(cls, v: str) -> str:
+        # TODO(I18N-PHONE):各国 phone 精确校验待补,本轮用占位正则
+        if not SUPPLIER_PHONE_REGEX.match(v):
+            raise ValueError("联系电话格式不正确(占位规则:6-20 位,允许 +、数字、空格、短横)")
+        return v
+
+    @field_validator("country_code")
+    @classmethod
+    def _check_country(cls, v: str) -> str:
+        if v not in COUNTRY_CODES:
+            raise ValueError(f"country_code 必须是 9 国之一:{','.join(COUNTRY_CODES)}")
+        return v
+
+    @field_validator("language_preference")
+    @classmethod
+    def _check_lang(cls, v: str) -> str:
+        if v not in LANGUAGE_CODES:
+            raise ValueError(f"language_preference 必须是合法语言 code 之一:{','.join(LANGUAGE_CODES)}")
+        return v
 
 
 class RegisterOut(BaseModel):

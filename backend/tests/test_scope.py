@@ -71,8 +71,10 @@ async def _buyer_token(client):
 async def _supplier_token(client):
     await client.post(
         "/api/v1/auth/register/supplier",
-        json={"email": "sup.scope@x.com", "name": "S", "password": "Abcd1234",
-              "company_name": "S Co", "business_license_no": "SC-1"},
+        json={"email": "sup.scope@x.com", "name": "S", "phone": "13900139501",
+              "password": "Abcd1234", "company_name": "S Co",
+              "country_code": "CN", "registration_no": "SC-1",
+              "language_preference": "zh"},
     )
     return await _login(client, "sup.scope@x.com", "Abcd1234")
 

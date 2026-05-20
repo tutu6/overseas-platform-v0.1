@@ -22,7 +22,9 @@ SUPPLIER_PAYLOAD = {
     "phone": "13800138001",
     "password": "Abcd1234",
     "company_name": "华建供应链有限公司",
-    "business_license_no": "91110000XXXXXXXXXX",
+    "country_code": "CN",
+    "registration_no": "91110000XXXXXXXXXX",
+    "language_preference": "zh",
 }
 
 
@@ -56,29 +58,91 @@ async def test_buyer_register_weak_password(client):
 
 
 @pytest.mark.asyncio
-async def test_supplier_register_success(client):
+async def test_supplier_register_success(client, db_session):
     r = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     assert r.json()["data"]["email"] == SUPPLIER_PAYLOAD["email"]
+
+    # 断言 language_preference 落库正确
+    from sqlalchemy import select
+    from app.db.models.user import User
+    row = await db_session.execute(
+        select(User).where(User.email == SUPPLIER_PAYLOAD["email"])
+    )
+    user = row.scalar_one()
+    assert user.language_preference == SUPPLIER_PAYLOAD["language_preference"]
 
 
 @pytest.mark.asyncio
-async def test_supplier_register_duplicate_license(client, db_session):
-    """重复执照号 → 409 + 友好文案,且不残留任何新用户数据。"""
-    await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
-    other = {**SUPPLIER_PAYLOAD, "email": "another@huajian.com", "phone": "13900139500"}
-    r = await client.post("/api/v1/auth/register/supplier", json=other)
-    assert r.status_code == 409
+async def test_supplier_register_duplicate_per_country(client, db_session):
+    """(country_code, registration_no) 复合唯一:
+    - 同 country + 同 reg_no → 409 + 标准化文案
+    - 不同 country + 同 reg_no → 200(撞号被允许)
+    """
+    # 首次注册成功
+    r1 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r1.status_code == 200
 
-    body = r.json()
-    assert "该供应商已在平台注册" in body["message"]
-    assert "联系企业管理员" in body["message"]
+    # 同 country + 同 reg_no → 409
+    dup_same_country = {
+        **SUPPLIER_PAYLOAD,
+        "email": "another@huajian.com",
+        "phone": "13900139500",
+    }
+    r2 = await client.post("/api/v1/auth/register/supplier", json=dup_same_country)
+    assert r2.status_code == 409
+    body = r2.json()
+    # PRD §5.3 文案逐字校验(不暴露 owner / 公司名)
+    assert body["message"] == (
+        "当前企业已在平台注册。如需加入,请联系您所在企业的平台管理员添加账号。"
+    )
+    # 不暴露任何已存在数据(message 里不能出现公司名等)
+    assert "华建" not in body["message"]
+    assert "li@huajian.com" not in body["message"]
 
-    # 早 raise 不应残留 user / supplier_member / supplier_org 行
+    # 早 raise:不残留新 user 行
     from sqlalchemy import select
     from app.db.models.user import User
-    row = await db_session.execute(select(User).where(User.email == "another@huajian.com"))
+    row = await db_session.execute(
+        select(User).where(User.email == "another@huajian.com")
+    )
     assert row.scalar_one_or_none() is None
+
+    # 不同 country + 同 reg_no 字符串 → 应该 200(复合唯一关键测试)
+    other_country = {
+        **SUPPLIER_PAYLOAD,
+        "email": "ahmad@malaysia.com",
+        "phone": "60123456789",
+        "country_code": "MY",
+        "registration_no": SUPPLIER_PAYLOAD["registration_no"],
+        "language_preference": "ms",
+        "company_name": "Malaysia Supply Co",
+    }
+    r3 = await client.post("/api/v1/auth/register/supplier", json=other_country)
+    assert r3.status_code == 200, r3.text
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_invalid_country_code(client):
+    bad = {**SUPPLIER_PAYLOAD, "country_code": "XX"}
+    r = await client.post("/api/v1/auth/register/supplier", json=bad)
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_missing_language_preference(client):
+    bad = {**SUPPLIER_PAYLOAD}
+    bad.pop("language_preference")
+    r = await client.post("/api/v1/auth/register/supplier", json=bad)
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_no_username_field(client):
+    """payload 多带 username 字段应被 422 拒绝(SUPPLIER 入参契约不含 username)。"""
+    bad = {**SUPPLIER_PAYLOAD, "username": "ghost"}
+    r = await client.post("/api/v1/auth/register/supplier", json=bad)
+    assert r.status_code == 422
 
 
 @pytest.mark.asyncio
