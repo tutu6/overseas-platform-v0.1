@@ -73,9 +73,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ❌ NextAuth.js(我们直接管 token)
 - ❌ Prisma(后端是 FastAPI + SQLAlchemy)
 - ❌ Redis(MVP 单机内存足够)
-- ❌ Docker / 容器化
 - ❌ i18n / next-intl(MVP 不做国际化)
 - ❌ 任何 OAuth / SSO / 2FA / 邮件 / 短信库
+- ❌ K8s / Swarm / 镜像 registry(单机 compose 足够)
+- ❌ Nginx / HTTPS / 域名(MVP 阶段公网 IP 直连)
+
+**注**:Docker / docker-compose 已用于部署(见「部署架构」章节),
+但**本地开发不要走 Docker**,仍用 `uvicorn --reload` + `pnpm dev`。
 
 ---
 
@@ -314,6 +318,89 @@ pnpm build                 # 构建
 pnpm lint                  # ESLint
 ```
 
+### Docker(部署用,本地开发不用)
+
+```bash
+# 本地预演生产镜像(debug 用)
+cp .env.production.example .env.production    # 填实际值
+docker compose --env-file .env.production up -d --build
+
+# 部署:手动触发(代码提交 / 合并 main 不会自动部署)
+gh workflow run "Deploy to ECS"               # 推荐:命令行一条
+gh run watch                                  # 查看进度
+# 或网页:GitHub Actions tab → "Deploy to ECS" → Run workflow
+
+# 应急:SSH 到 ECS 手动跑
+ssh user@<ECS-IP>
+cd /opt/overseas-platform && bash deploy/deploy.sh
+
+# 日志 / 进容器
+docker compose logs -f backend
+docker compose exec backend bash
+docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+
+# 备份 / 恢复
+source .env.production
+docker compose exec -T db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > backup.sql.gz
+gunzip -c backup.sql.gz | docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+```
+
+---
+
+## 部署架构
+
+### 本地开发(不变,不要用 Docker 跑开发)
+
+- 后端:`cd backend && uvicorn app.main:app --reload --port 8000`
+- 前端:`cd frontend && pnpm dev`
+- 数据库:本机 brew PostgreSQL @5433
+
+### 演示 / 生产部署(Docker compose)
+
+| 文件 | 用途 |
+|---|---|
+| `docker-compose.yml` | 三服务编排(db + backend + frontend) |
+| `backend/Dockerfile` | 多阶段构建,uv 装依赖,非 root 运行 |
+| `frontend/Dockerfile` | 多阶段构建,pnpm + Next.js standalone |
+| `backend/docker-entrypoint.sh` | 等 DB → alembic upgrade → 启动应用(lifespan 自动跑 seed) |
+| `deploy/deploy.sh` | ECS 上由 CI 触发的部署脚本 |
+| `deploy/check-migration-safety.sh` | CI 拦截破坏性迁移 |
+| `.github/workflows/deploy.yml` | 手动触发(workflow_dispatch),代码合 main 不会自动部署 |
+| `.env.production` | ECS 上维护,**不入 Git** |
+| `.env.production.example` | 入 Git 的模板 |
+
+### 部署触发链路
+
+```
+你手动触发(gh workflow run "Deploy to ECS" 或网页点 Run)
+      ↓
+GitHub Actions:check-migration → SSH 到 ECS → bash deploy/deploy.sh
+      ↓
+ECS:pg_dump 备份 → git pull → docker compose up -d --build → 健康检查
+```
+
+### 数据持久化约束(必须遵守)
+
+- ✅ DB 数据落在 named volume `overseas_platform_pgdata`(显式 name)
+- ✅ 每次部署前自动 `pg_dump`,留 7 天
+- ❌ **严禁** 任何脚本 / CI / 文档出现 `docker compose down -v`、`docker volume rm`、`docker system prune --volumes`
+- ❌ **严禁** entrypoint 跑 `alembic downgrade` / `drop` / `truncate`
+- ❌ **严禁** seed.py 用 `delete + insert` 模式,必须先查后写(已实现)
+
+### 镜像与日志约束(必须遵守)
+
+- ✅ 所有镜像 tag **精确到 minor**(如 `postgres:16.4-alpine`、`node:20.18-alpine`、`python:3.11.10-slim`)
+- ✅ 所有服务挂 `logging` 限制:`max-size: 10m`、`max-file: 3`(每服务 30MB,防磁盘塞满)
+- ✅ Dockerfile 内 apt / apk / pip / npm 源**都换国内镜像**(国内 build 必备,昨天踩过 48 分钟卡 apt 的坑)
+- ❌ **严禁** 用 `pnpm@latest` / `node:20-alpine` / `:latest` / 任何浮动 tag
+
+### 迁移安全
+
+- 含 `drop_column` / `drop_table` / `alter_column type_=` / raw `DROP|TRUNCATE|DELETE` 的 migration → CI 自动拦截
+- 确实要执行 → commit message 加 `[allow-destructive-migration]` 或手动 SSH 跑 deploy.sh
+
+详细部署指南见 `deploy/README.md`。
+
 ---
 
 ## 环境变量
@@ -416,6 +503,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | Q25 | ADMIN 能否访问业务数据 | 严格分离 |
 | Q26 | super admin 密码策略 | 环境变量注入 + 强制改密 |
 | Q27 | 何时切换 PostgreSQL | ✅ **已切**(2026-05-18,brew @16 端口 5433) |
+| Q28 | 是否容器化部署 | ✅ **已切**(2026-05-20,Docker compose + GitHub Actions 手动触发部署,详见「部署架构」) |
 
 完整待定点列表见 `docs/RBAC与组织架构设计讨论_v1.2.md` 和 `docs/MVP业务流程共识_v1.2.md`。
 
