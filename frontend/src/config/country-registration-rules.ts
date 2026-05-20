@@ -40,7 +40,8 @@ export const COUNTRIES = [
       hint: "18 位",
       // TODO(REG-RULE):国标 GB 32100-2015 校验位算法待补,本轮只验长度+字符集
       regex: /^[0-9A-Z]{18}$/,
-      transform: (v: string) => v.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 18),
+      // 字母数字国(PRD v1.4 Δ5):trim + toUpperCase + slice
+      transform: (v: string) => v.trim().toUpperCase().slice(0, 18),
     },
   },
   {
@@ -51,9 +52,10 @@ export const COUNTRIES = [
     localLangName: "ខ្មែរ",
     regNo: {
       label: "MOC 注册号",
-      hint: "6-12 位数字",
-      regex: /^[0-9]{6,12}$/,
-      transform: (v: string) => v.replace(/\D/g, "").slice(0, 12),
+      hint: "10-12 位字母数字",
+      // TODO(REG-RULE):PRD v1.4 PM 文档基准,精确规则待业务深化
+      regex: /^[A-Z0-9]{10,12}$/,
+      transform: (v: string) => v.trim().toUpperCase().slice(0, 12),
     },
   },
   {
@@ -63,10 +65,12 @@ export const COUNTRIES = [
     localLang: "ur",
     localLangName: "اُردُو",
     regNo: {
-      label: "NTN 税号",
-      hint: "7-8 位数字",
-      regex: /^[0-9]{7,8}$/,
-      transform: (v: string) => v.replace(/\D/g, "").slice(0, 8),
+      // PRD v1.4 Δ3:NTN → SECP
+      label: "SECP 注册号",
+      hint: "7-10 位字母数字",
+      // TODO(REG-RULE):PRD v1.4 PM 文档基准
+      regex: /^[A-Z0-9]{7,10}$/,
+      transform: (v: string) => v.trim().toUpperCase().slice(0, 10),
     },
   },
   {
@@ -76,10 +80,12 @@ export const COUNTRIES = [
     localLang: "ar",
     localLangName: "العربية",
     regNo: {
-      label: "RC 商业登记号",
-      hint: "20 位以内数字",
-      regex: /^[0-9]{1,20}$/,
-      transform: (v: string) => v.replace(/\D/g, "").slice(0, 20),
+      // PRD v1.4 Δ3:RC → ICE
+      label: "ICE 企业统一编号",
+      hint: "15 位数字",
+      // TODO(REG-RULE):PRD v1.4 PM 文档基准
+      regex: /^[0-9]{15}$/,
+      transform: (v: string) => v.trim().replace(/\D/g, "").slice(0, 15),
     },
   },
   {
@@ -89,10 +95,11 @@ export const COUNTRIES = [
     localLang: "ar",
     localLangName: "العربية",
     regNo: {
-      label: "商业登记号",
-      hint: "30 位以内",
-      regex: /^.{1,30}$/,
-      transform: (v: string) => v.slice(0, 30),
+      label: "MoC 商业登记号",
+      hint: "6-10 位数字",
+      // TODO(REG-RULE):PRD v1.4 PM 文档基准
+      regex: /^[0-9]{6,10}$/,
+      transform: (v: string) => v.trim().replace(/\D/g, "").slice(0, 10),
     },
   },
   {
@@ -105,7 +112,8 @@ export const COUNTRIES = [
       label: "NIB(营业识别号)",
       hint: "13 位纯数字",
       regex: /^[0-9]{13}$/,
-      transform: (v: string) => v.replace(/\D/g, "").slice(0, 13),
+      // 纯数字国(PRD v1.4 Δ5):trim + replace(/\D/g) + slice
+      transform: (v: string) => v.trim().replace(/\D/g, "").slice(0, 13),
     },
   },
   {
@@ -118,7 +126,7 @@ export const COUNTRIES = [
       label: "SSM 注册号",
       hint: "12 位纯数字",
       regex: /^[0-9]{12}$/,
-      transform: (v: string) => v.replace(/\D/g, "").slice(0, 12),
+      transform: (v: string) => v.trim().replace(/\D/g, "").slice(0, 12),
     },
   },
   {
@@ -131,7 +139,7 @@ export const COUNTRIES = [
       label: "CR 商业登记号",
       hint: "10 位数字",
       regex: /^[0-9]{10}$/,
-      transform: (v: string) => v.replace(/\D/g, "").slice(0, 10),
+      transform: (v: string) => v.trim().replace(/\D/g, "").slice(0, 10),
     },
   },
   {
@@ -141,10 +149,11 @@ export const COUNTRIES = [
     localLang: "ar",
     localLangName: "العربية",
     regNo: {
-      label: "营业执照号(Trade License No)",
-      hint: "30 位以内",
-      regex: /^.{1,30}$/,
-      transform: (v: string) => v.slice(0, 30),
+      label: "Trade License No",
+      hint: "6-12 位字母数字",
+      // TODO(REG-RULE):PRD v1.4 PM 文档基准
+      regex: /^[A-Z0-9]{6,12}$/,
+      transform: (v: string) => v.trim().toUpperCase().slice(0, 12),
     },
   },
 ] as const satisfies readonly CountryRule[];
@@ -159,6 +168,13 @@ export type LanguageCode = typeof LANGUAGE_CODES[number];
 /** 重复注册错误文案:前后端逐字一致(后端 constants 中同名常量),不暴露任何 owner 信息 */
 export const DUPLICATE_REGISTRATION_ERROR_MESSAGE =
   "当前企业已在平台注册。如需加入,请联系您所在企业的平台管理员添加账号。";
+
+/**
+ * 重复入驻业务错误码(PRD v1.4 Δ9):数字 40901。
+ * 前端识别错误必须用数字 `if (response.code === BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION)`,
+ * **严禁** 与字符串比较(异常类名 `SupplierAlreadyRegisteredError` 只在后端 Python 侧可见)。
+ */
+export const BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION = 40901;
 
 /** SupplierOrg 状态字符串(未来增 status 时统一加在此处) */
 export const STATUS_DRAFT = "DRAFT";
