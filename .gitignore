@@ -24,8 +24,15 @@ out/
 .env
 .env.local
 .env*.local
+.env.production
 !.env.example
 !.env.local.example
+!.env.production.example
+
+# ---- Docker 部署运行时文件(ECS 本地维护)----
+backups/
+*.sql.gz
+legacy-demo.sql.gz
 
 # ---- 编辑器 / 系统 ----
 .DS_Store
