@@ -220,6 +220,21 @@ async def test_me_returns_full_profile(client):
     assert "project:read" in data["permissions"]  # BUYER 有项目读权限(v3 §3)
     assert data["organization"]["type"] == "BUYER_ORG"
     assert data["organization"]["name"] == "中建三局"
+    # PRD v1.3 §5.4:/auth/me 必须返回 organization.status
+    assert "status" in data["organization"]
+
+
+@pytest.mark.asyncio
+async def test_me_supplier_organization_status_is_draft(client):
+    """SUPPLIER 注册后 /me 返回 organization.status == 'DRAFT',前端 banner 判定基础。"""
+    await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    login = await _login(client, SUPPLIER_PAYLOAD["email"], SUPPLIER_PAYLOAD["password"])
+    token = login.json()["data"]["access_token"]
+    r = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert data["organization"]["type"] == "SUPPLIER_ORG"
+    assert data["organization"]["status"] == "DRAFT"
 
 
 @pytest.mark.asyncio

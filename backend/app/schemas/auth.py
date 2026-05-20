@@ -165,6 +165,8 @@ class OrganizationOut(BaseModel):
     id: int
     name: str
     is_owner: bool
+    # 前端 dashboard banner 判定用:SupplierOrg.status / BuyerOrg.status
+    status: str | None = None
 
 
 class MeOut(BaseModel):
