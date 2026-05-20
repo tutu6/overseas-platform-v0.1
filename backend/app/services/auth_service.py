@@ -15,6 +15,7 @@ from app.core.exceptions import (
     ConflictError,
     InvalidCredentialsError,
     NotFoundError,
+    SupplierAlreadyRegisteredError,
     TooManyAttemptsError,
     ValidationFailedError,
 )
@@ -232,7 +233,7 @@ async def register_supplier(
         )
     )
     if row.scalar_one_or_none() is not None:
-        raise ConflictError(DUPLICATE_REGISTRATION_ERROR_MESSAGE)
+        raise SupplierAlreadyRegisteredError(DUPLICATE_REGISTRATION_ERROR_MESSAGE)
 
     user = User(
         email=email,

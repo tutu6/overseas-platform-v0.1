@@ -36,6 +36,9 @@ import { StepCountry } from "./_components/StepCountry";
 import { StepLanguage } from "./_components/StepLanguage";
 import { StepForm } from "./_components/StepForm";
 import { useRegisterDraft } from "./_components/useRegisterDraft";
+import { useBeforeUnload } from "./_components/useBeforeUnload";
+import { useAuthStore } from "@/stores/authStore";
+import { defaultDashboardOf } from "@/config/navigation";
 
 type Role = "BUYER" | "SUPPLIER" | "";
 
@@ -87,7 +90,17 @@ export default function RegisterPage() {
   const [role, setRole] = useState<Role>("");
 
   // SUPPLIER 草稿(sessionStorage)
-  const { draft, hydrated, update, clearDraft } = useRegisterDraft();
+  const { draft, hydrated, update, clearDraft, clearRegistrationNo, clearLanguagePreference } =
+    useRegisterDraft();
+
+  // PRD v1.4 Δ8:已登录用户访问 /register 自动跳工作台
+  const me = useAuthStore((s) => s.user);
+  const authLoaded = useAuthStore((s) => s.loaded);
+  useEffect(() => {
+    if (authLoaded && me?.roles?.length) {
+      router.replace(defaultDashboardOf(me.roles));
+    }
+  }, [authLoaded, me, router]);
 
   // 切换角色时清掉 SUPPLIER 草稿(PRD §2.3:跨角色切换清掉草稿)
   const handleSwitchRole = (next: Role) => {
@@ -101,6 +114,19 @@ export default function RegisterPage() {
       setRole("SUPPLIER");
     }
   }, [hydrated, draft.country_code, role]);
+
+  // PRD v1.4 Δ7:有未提交数据时关 tab / 刷新 弹原生确认框
+  const hasAnyNonEmptyDraftField =
+    !!draft.country_code ||
+    !!draft.language_preference ||
+    !!draft.company_name ||
+    !!draft.registration_no ||
+    !!draft.name ||
+    !!draft.phone ||
+    !!draft.email;
+  const shouldWarnOnUnload =
+    role === "SUPPLIER" && draft.currentStep >= 2 && hasAnyNonEmptyDraftField;
+  useBeforeUnload(shouldWarnOnUnload);
 
   return (
     <>
@@ -198,6 +224,8 @@ export default function RegisterPage() {
               draft={draft}
               hydrated={hydrated}
               update={update}
+              clearRegistrationNo={clearRegistrationNo}
+              clearLanguagePreference={clearLanguagePreference}
               onSubmitted={() => {
                 clearDraft();
                 router.replace("/login?registered=1");
@@ -231,10 +259,19 @@ interface SupplierWizardProps {
   draft: ReturnType<typeof useRegisterDraft>["draft"];
   hydrated: boolean;
   update: ReturnType<typeof useRegisterDraft>["update"];
+  clearRegistrationNo: ReturnType<typeof useRegisterDraft>["clearRegistrationNo"];
+  clearLanguagePreference: ReturnType<typeof useRegisterDraft>["clearLanguagePreference"];
   onSubmitted: () => void;
 }
 
-function SupplierWizard({ draft, hydrated, update, onSubmitted }: SupplierWizardProps) {
+function SupplierWizard({
+  draft,
+  hydrated,
+  update,
+  clearRegistrationNo,
+  clearLanguagePreference,
+  onSubmitted,
+}: SupplierWizardProps) {
   if (!hydrated) {
     return (
       <div className="flex items-center justify-center py-10">
@@ -262,7 +299,15 @@ function SupplierWizard({ draft, hydrated, update, onSubmitted }: SupplierWizard
       {step === 1 && (
         <StepCountry
           selected={draft.country_code}
-          onSelect={(code: CountryCode) => update({ country_code: code })}
+          onSelect={(code: CountryCode) => {
+            // PRD v1.4 Δ4:改国家时自动清 registration_no + 重置 language_preference
+            // 其他字段(company_name / name / phone / email)保留
+            if (code !== draft.country_code) {
+              clearRegistrationNo();
+              clearLanguagePreference();
+            }
+            update({ country_code: code });
+          }}
           onNext={() => update({ currentStep: 2 })}
         />
       )}

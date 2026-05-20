@@ -21,6 +21,12 @@ interface StepCountryProps {
 export function StepCountry({ selected, onSelect, onNext }: StepCountryProps) {
   const country = selected ? getCountryByCode(selected) : undefined;
 
+  // PRD v1.4 Δ4:重新选择国家时,父级 onSelect 内自动清 registration_no
+  // 和重置 language_preference(由 SupplierWizard 实现)
+  const handleChange = (code: CountryCode) => {
+    if (code !== selected) onSelect(code);
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -37,7 +43,7 @@ export function StepCountry({ selected, onSelect, onNext }: StepCountryProps) {
         <select
           id="country-select"
           value={selected}
-          onChange={(e) => onSelect(e.target.value as CountryCode)}
+          onChange={(e) => handleChange(e.target.value as CountryCode)}
           className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 transition-all focus:border-[#003366] focus:outline-none focus:ring-2 focus:ring-[#003366]/15"
         >
           <option value="" disabled>

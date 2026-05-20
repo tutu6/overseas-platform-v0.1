@@ -7,13 +7,14 @@
 // - blur 用 country.regNo.regex 校验
 // - 密码不存任何持久化路径(useRegisterDraft 已防御)
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api";
 import { authApi } from "@/lib/auth";
 import {
+  validateAllRegisterFields,
   validateEmail,
   validatePassword,
   validatePasswordConfirm,
@@ -22,6 +23,8 @@ import {
   validateSupplierPhone,
 } from "@/lib/validators";
 import {
+  BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION,
+  DUPLICATE_REGISTRATION_ERROR_MESSAGE,
   getCountryByCode,
   type CountryCode,
   type LanguageCode,
@@ -79,6 +82,30 @@ export function StepForm({
   const [errors, setErrors] = useState<Partial<Record<FieldName, string | null>>>({});
   const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({});
   const [submitError, setSubmitError] = useState("");
+
+  // PRD v1.4 Δ6:提交按钮置灰 - 全字段校验状态的实时映射。
+  // useMemo 依赖 draft、密码、country.code,任一变化都重算。
+  const fullForm = {
+    ...draft,
+    password,
+    confirmPassword,
+  };
+  const validation = useMemo(
+    () => validateAllRegisterFields(fullForm, countryCode),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      draft.company_name,
+      draft.registration_no,
+      draft.name,
+      draft.phone,
+      draft.email,
+      password,
+      confirmPassword,
+      countryCode,
+    ],
+  );
+  const isFormValid = validation.valid;
+  const missingFields = validation.errors.map((e) => e.fieldLabel);
 
   if (!country) return null;
 
@@ -183,7 +210,15 @@ export function StepForm({
       }
       onSubmitted();
     } catch (e2) {
-      setSubmitError(e2 instanceof ApiError ? e2.message : "注册失败,请稍后重试");
+      // PRD v1.4 Δ9:重复入驻识别走数字 code,严禁字符串比较
+      if (
+        e2 instanceof ApiError &&
+        e2.code === BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION
+      ) {
+        setSubmitError(DUPLICATE_REGISTRATION_ERROR_MESSAGE);
+      } else {
+        setSubmitError(e2 instanceof ApiError ? e2.message : "注册失败,请稍后重试");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -377,8 +412,14 @@ export function StepForm({
         </button>
         <button
           type="submit"
-          disabled={submitting}
-          className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-[#FF6B35] text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#e05a25] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
+          disabled={!isFormValid || submitting}
+          title={isFormValid ? "" : `请完善:${missingFields.join("、")}`}
+          className={
+            "flex h-12 flex-1 items-center justify-center gap-2 rounded-lg text-sm font-semibold shadow-sm transition-all active:scale-[0.99] " +
+            (isFormValid && !submitting
+              ? "bg-[#FF6B35] hover:bg-[#e05a25] text-white cursor-pointer"
+              : "bg-gray-300 text-gray-500 cursor-not-allowed")
+          }
         >
           {submitting ? (
             <>

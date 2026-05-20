@@ -99,3 +99,61 @@ export function validateRegistrationNoByCountry(
     return `${country.regNo.label}格式不正确(${country.regNo.hint})`;
   return null;
 }
+
+// ===== PRD v1.4 Δ6:提交按钮置灰 - 主流程级硬规则 =====
+
+/** Step 3 表单全字段输入(密码因不进 sessionStorage,从组件 state 临时合入) */
+export interface SupplierRegisterFullForm {
+  company_name: string;
+  registration_no: string;
+  name: string;
+  phone: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
+export interface FieldError {
+  field: keyof SupplierRegisterFullForm;
+  fieldLabel: string;
+  message: string;
+}
+
+/**
+ * Step 3 全字段校验。`isFormValid` = `errors.length === 0`。
+ * 用于:1) 提交按钮 disabled 绑定;2) hover title 拼接 `请完善:X、Y、Z`。
+ *
+ * 入参 countryCode 用于按国家分发 registration_no 正则;空字符串时 registration_no 报"请先选择国家"。
+ */
+export function validateAllRegisterFields(
+  form: SupplierRegisterFullForm,
+  countryCode: string,
+): { valid: boolean; errors: FieldError[] } {
+  const errors: FieldError[] = [];
+
+  const push = (
+    field: keyof SupplierRegisterFullForm,
+    fieldLabel: string,
+    message: string | null,
+  ) => {
+    if (message) errors.push({ field, fieldLabel, message });
+  };
+
+  push("company_name", "公司名称", validateRequired(form.company_name, "公司名称"));
+  push(
+    "registration_no",
+    "注册号",
+    validateRegistrationNoByCountry(countryCode, form.registration_no),
+  );
+  push("name", "联系人", validateRequired(form.name, "联系人姓名"));
+  push("phone", "联系电话", validateSupplierPhone(form.phone));
+  push("email", "联系邮箱", validateEmail(form.email));
+  push("password", "密码", validatePassword(form.password));
+  push(
+    "confirmPassword",
+    "密码确认",
+    validatePasswordConfirm(form.password, form.confirmPassword),
+  );
+
+  return { valid: errors.length === 0, errors };
+}

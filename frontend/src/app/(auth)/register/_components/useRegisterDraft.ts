@@ -106,5 +106,22 @@ export function useRegisterDraft() {
     clearRegisterDraft();
   }, []);
 
-  return { draft, hydrated, update, clearDraft };
+  // PRD v1.4 Δ4:改国家时清字段 + 重置语言。
+  // 其他字段(company_name / name / phone / email)保留,不受国家影响。
+  const clearRegistrationNo = useCallback(() => {
+    update({ registration_no: "" });
+  }, [update]);
+
+  const clearLanguagePreference = useCallback(() => {
+    update({ language_preference: "" });
+  }, [update]);
+
+  return {
+    draft,
+    hydrated,
+    update,
+    clearDraft,
+    clearRegistrationNo,
+    clearLanguagePreference,
+  };
 }
