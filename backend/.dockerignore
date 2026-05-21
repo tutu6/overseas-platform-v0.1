@@ -41,8 +41,7 @@ frontend/
 README.md
 *.md
 
-# 脚本(开发工具,运行时不需要)
-scripts/
+# 注:scripts/ 故意保留进镜像 — 运维脚本(如 import_categories.py)需在 ECS 上执行
 
 # Docker 元文件(自己不需要进镜像;但 docker-entrypoint.sh 必须保留,启动要用)
 Dockerfile
