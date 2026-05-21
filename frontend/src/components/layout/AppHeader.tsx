@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { LogOut, Settings, Bug, Sparkles } from "lucide-react";
 
 import { useAuthStore } from "@/stores/authStore";
@@ -23,22 +24,35 @@ const ROLE_LABEL: Record<RoleCode, string> = {
 };
 
 /** 顶部 Header(工作台 + 公开区共用)。 */
-export function AppHeader({ showDebugToggle = false }: { showDebugToggle?: boolean }) {
+export function AppHeader({
+  showDebugToggle = false,
+  centerNav,
+}: {
+  showDebugToggle?: boolean;
+  /** 中间区域插槽,公开区在此渲染主导航 */
+  centerNav?: ReactNode;
+}) {
   const user = useAuthStore((s) => s.user);
   const [debugMode, setDebugMode] = useDebugMode();
   const logout = useLogout();
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-4 px-6">
+      <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between gap-4 px-6">
         {/* 左:品牌 */}
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#003366] to-[#0F4C81]">
-            <span className="text-sm font-black text-white">{BRAND.logoChar}</span>
-            <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white bg-[#FF6B35]" />
-          </div>
-          <span className="text-sm font-semibold text-slate-800">{BRAND.name}</span>
+        <Link href="/" className="group flex shrink-0 items-center gap-3" aria-label={`${BRAND.name} 首页`}>
+          <span className="relative flex h-8 w-8 items-center justify-center rounded bg-[#003366] transition-transform duration-300 group-hover:scale-105">
+            <span className="select-none text-sm font-black leading-none text-white">{BRAND.logoChar}</span>
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#FF6B35]" />
+          </span>
+          <span className="leading-none">
+            <span className="block text-xl font-black tracking-tight text-[#003366]">{BRAND.name}</span>
+            <span className="mt-0.5 block text-[9px] font-medium tracking-[0.15em] text-gray-400">{BRAND.nameEn}</span>
+          </span>
         </Link>
+
+        {/* 中:主导航插槽(公开区填充) */}
+        {centerNav && <div className="flex flex-1 justify-center">{centerNav}</div>}
 
         {/* 右:调试 toggle + 用户 */}
         <div className="flex items-center gap-3">

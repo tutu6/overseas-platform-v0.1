@@ -23,8 +23,10 @@ import {
   Send,
   Settings2,
   ShieldAlert,
+  ShieldCheck,
   ShoppingBag,
   ShoppingCart,
+  Sparkles,
   Store,
   UserCircle2,
   Users,
@@ -42,6 +44,8 @@ export type WorkspaceCode = "BUYER" | "SUPPLIER" | "OPERATOR" | "ADMIN" | "PUBLI
 export interface NavItem {
   path: string;
   label: string;
+  /** 英文副标,公开区顶部导航中英双语展示用 */
+  labelEn?: string;
   icon: LucideIcon;
   /** 该 tab 绑定的资源域(用于 sidebar 显隐判断 + 占位页 scope 展示)。 */
   resource: ResourceCode | null;
@@ -69,35 +73,57 @@ export interface Workspace {
 export const PUBLIC_NAV: NavItem[] = [
   {
     path: "/",
-    label: "平台首页",
+    label: "首页",
+    labelEn: "Home",
     icon: LayoutDashboard,
     resource: null,
     requiredPermissions: [],
     description: "平台介绍与入口",
   },
   {
+    path: "/credit",
+    label: "信用评估",
+    labelEn: "Credit",
+    icon: ShieldCheck,
+    resource: null,
+    requiredPermissions: [],
+    description: "供应商信用评估与资质认证(占位,功能开发中)",
+  },
+  {
+    path: "/risk",
+    label: "风控驾驶舱",
+    labelEn: "Risk Control",
+    icon: Gauge,
+    resource: null,
+    requiredPermissions: [],
+    description: "马甲关系 / 价格异常 / 合规雷达(占位,功能开发中)",
+  },
+  {
     path: "/mall",
     label: "严选商城",
+    labelEn: "Mall",
     icon: ShoppingBag,
     resource: "product",
     requiredPermissions: [],
     description: "B2B 工业品采购前台",
   },
   {
-    path: "/suppliers",
-    label: "供应商目录",
-    icon: Store,
-    resource: "supplier",
-    requiredPermissions: [],
-    description: "已入驻供应商画像与目录",
-  },
-  {
     path: "/countries",
     label: "国别准入",
+    labelEn: "Countries",
     icon: Globe,
     resource: "country",
     requiredPermissions: [],
     description: "目标出口国别的准入要求与认证",
+  },
+  {
+    path: "/ai",
+    label: "AI工具箱",
+    labelEn: "AI Tools",
+    icon: Sparkles,
+    resource: null,
+    requiredPermissions: [],
+    description: "标准问答 / 证书审查 / 报价比价 / 多语种翻译(占位,功能开发中)",
   },
 ];
 
