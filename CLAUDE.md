@@ -485,9 +485,25 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ### 分支
 
-- `main` — 主分支
+- `main` — 主分支(受保护,**不允许直接 commit / push**)
 - `feat/<name>` — 功能分支
 - `fix/<name>` — 修复分支
+
+**强制工作流(每次开发前必须遵守):**
+
+1. 动手任何代码改动前,先确认当前分支:`git rev-parse --abbrev-ref HEAD`
+2. 如果在 `main` → **立即切分支**:`git checkout -b feat/<descriptive-name>`(基于最新 main)
+3. 在 feat/fix 分支上开发、自测、commit
+4. 推分支:`git push -u origin feat/<name>`
+5. 开 PR:`gh pr create`(commit 标题落到 main 时自动带 `(#NN)`)
+6. PR 合并后再回 main pull
+
+**绝对禁止:**
+- ❌ 直接在 local main 上 commit(哪怕只是一行小改)
+- ❌ 直接 `git push origin main`(项目所有变更都走 PR,看 `git log` 每条都带 `(#NN)`)
+- ❌ 把多个不相关功能塞一个分支,一个分支一件事
+
+**例外**:仅文档微调且不打算 commit / 本地实验脚本可不切分支。
 
 ---
 
