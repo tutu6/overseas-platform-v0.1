@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, ChevronRight, X } from "lucide-react";
 
 import { PublicLayout } from "@/components/layout/PublicLayout";
@@ -44,15 +45,36 @@ function categoryContainsCode(category: CategoryTreeNode, code: string): boolean
   return (category.children || []).some((child) => categoryContainsCode(child, code));
 }
 
-export default function MallPage() {
+function MallContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlCat = searchParams.get("cat") || "";
+
   const { tree: categoryTree, isLoading: loadingCategories } = useCategoryTree();
 
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(urlCat);
   const [hoveredLevel1, setHoveredLevel1] = useState("");
   const [expandedLevel1, setExpandedLevel1] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedTier, setSelectedTier] = useState("");
   const [searchInput, setSearchInput] = useState("");
+
+  // URL 变化(后退/前进 / 直接编辑地址栏)→ state 同步
+  useEffect(() => {
+    if (urlCat !== selectedCategory) {
+      setSelectedCategory(urlCat);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCat]);
+
+  // state 变化 → URL(replace 不入栈)
+  const syncCategoryToUrl = (code: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (code) params.set("cat", code);
+    else params.delete("cat");
+    const qs = params.toString();
+    router.replace(qs ? `/mall?${qs}` : "/mall", { scroll: false });
+  };
 
   const selectedCategoryName = useMemo(
     () => findCategoryNode(categoryTree, selectedCategory)?.name_zh || "",
@@ -64,13 +86,12 @@ export default function MallPage() {
     [categoryTree, hoveredLevel1]
   );
 
-  const handleCategoryClick = useCallback(
-    (code: string, closeHover = true) => {
-      setSelectedCategory((prev) => (prev === code ? "" : code));
-      if (closeHover) setHoveredLevel1("");
-    },
-    []
-  );
+  const handleCategoryClick = (code: string, closeHover = true) => {
+    const next = selectedCategory === code ? "" : code;
+    setSelectedCategory(next);
+    syncCategoryToUrl(next);
+    if (closeHover) setHoveredLevel1("");
+  };
 
   const handleMobileLevel1Click = (category: CategoryTreeNode) => {
     handleCategoryClick(category.code, false);
@@ -81,6 +102,7 @@ export default function MallPage() {
 
   const clearAll = () => {
     setSelectedCategory("");
+    syncCategoryToUrl("");
     setSelectedCountry("");
     setSelectedTier("");
     setSearchInput("");
@@ -445,5 +467,14 @@ export default function MallPage() {
         </div>
       </div>
     </PublicLayout>
+  );
+}
+
+// useSearchParams 在 Next.js 14 严格模式下必须包 Suspense
+export default function MallPage() {
+  return (
+    <Suspense fallback={null}>
+      <MallContent />
+    </Suspense>
   );
 }
