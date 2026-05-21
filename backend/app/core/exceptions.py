@@ -77,6 +77,64 @@ class SupplierAlreadyRegisteredError(BusinessError):
         super().__init__(status.HTTP_409_CONFLICT, 40901, message)
 
 
+class EmailAlreadyRegisteredError(BusinessError):
+    """邮箱已被注册(PRD v1.5 Δ2,code=40902)。单独抛出场景。"""
+
+    def __init__(
+        self,
+        message: str = "该邮箱已注册,请直接登录或更换邮箱",
+    ):
+        super().__init__(
+            status.HTTP_409_CONFLICT,
+            40902,
+            message,
+            data={"errors": [{"field": "email", "code": 40902, "message": message}]},
+        )
+
+
+class PhoneAlreadyRegisteredError(BusinessError):
+    """手机号已被注册(PRD v1.5 Δ2,code=40903)。单独抛出场景。"""
+
+    def __init__(
+        self,
+        message: str = "该手机号已注册,请直接登录或更换手机号",
+    ):
+        super().__init__(
+            status.HTTP_409_CONFLICT,
+            40903,
+            message,
+            data={"errors": [{"field": "phone", "code": 40903, "message": message}]},
+        )
+
+
+class MultipleValidationError(BusinessError):
+    """多错误并发场景(PRD v1.5 Δ3)。
+    顶层 code 按优先级取:40901(注册号重) > 40902(邮箱重) > 40903(手机号重)。
+    无论 errors 长度为 1 还是 N,response.data.errors 都返回数组。
+    """
+
+    # 数字优先级:索引小者优先,作为顶层 code 来源
+    _PRIORITY = (40901, 40902, 40903)
+
+    def __init__(self, errors: list[dict]):
+        if not errors:
+            # 业务上不该走到这里;防御性兜底
+            raise ValueError("MultipleValidationError requires at least one error")
+        # 取优先级最高的错误码作为顶层 code
+        codes = {e["code"] for e in errors}
+        top_code = next((c for c in self._PRIORITY if c in codes), errors[0]["code"])
+        if len(errors) == 1:
+            top_message = errors[0]["message"]
+        else:
+            top_message = "请修正以下问题"
+        super().__init__(
+            status.HTTP_409_CONFLICT,
+            top_code,
+            top_message,
+            data={"errors": errors},
+        )
+
+
 class NotFoundError(BusinessError):
     def __init__(self, message: str = "Not found"):
         super().__init__(status.HTTP_404_NOT_FOUND, 40400, message)

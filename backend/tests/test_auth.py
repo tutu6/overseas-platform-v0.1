@@ -122,10 +122,19 @@ async def test_supplier_register_duplicate_per_country(client, db_session):
     r2 = await client.post("/api/v1/auth/register/supplier", json=dup_same_country)
     assert r2.status_code == 409
     body = r2.json()
-    # PRD §5.3 文案逐字校验(不暴露 owner / 公司名)
+    assert body["code"] == 40901
+    # 单错误 message 仍是注册号重复文案
     assert body["message"] == (
         "当前企业已在平台注册。如需加入,请联系您所在企业的平台管理员添加账号。"
     )
+    # v1.5 Δ3:单错误也返回 data.errors 数组(长度 1)
+    assert body["data"]["errors"] == [{
+        "field": "registration_no",
+        "code": 40901,
+        "message": (
+            "当前企业已在平台注册。如需加入,请联系您所在企业的平台管理员添加账号。"
+        ),
+    }]
     # 不暴露任何已存在数据(message 里不能出现公司名等)
     assert "华建" not in body["message"]
     assert "li@huajian.com" not in body["message"]
@@ -150,6 +159,128 @@ async def test_supplier_register_duplicate_per_country(client, db_session):
     }
     r3 = await client.post("/api/v1/auth/register/supplier", json=other_country)
     assert r3.status_code == 200, r3.text
+
+
+# ---- v1.5 Δ3:一次返回所有错误 ----
+
+@pytest.mark.asyncio
+async def test_supplier_register_duplicate_email_only(client):
+    """已存在邮箱 + 新手机号 + 新 (country, reg_no) → code=40902,errors 长度 1。"""
+    r1 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r1.status_code == 200
+
+    payload = {
+        **SUPPLIER_PAYLOAD,
+        # email 重
+        "phone": "60111222333",  # 新
+        "country_code": "MY",  # 切国家
+        "registration_no": "999888777666",  # 新
+        "language_preference": "ms",
+        "company_name": "Another Co",
+    }
+    r2 = await client.post("/api/v1/auth/register/supplier", json=payload)
+    assert r2.status_code == 409
+    body = r2.json()
+    assert body["code"] == 40902
+    assert body["message"] == "该邮箱已注册,请直接登录或更换邮箱"
+    assert body["data"]["errors"] == [{
+        "field": "email",
+        "code": 40902,
+        "message": "该邮箱已注册,请直接登录或更换邮箱",
+    }]
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_duplicate_phone_only(client):
+    """已存在手机号 + 新邮箱 + 新 (country, reg_no) → code=40903,errors 长度 1。"""
+    r1 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r1.status_code == 200
+
+    payload = {
+        **SUPPLIER_PAYLOAD,
+        "email": "fresh@huajian.com",
+        # phone 重
+        "country_code": "MY",
+        "registration_no": "888777666555",
+        "language_preference": "ms",
+        "company_name": "Another Co",
+    }
+    r2 = await client.post("/api/v1/auth/register/supplier", json=payload)
+    assert r2.status_code == 409
+    body = r2.json()
+    assert body["code"] == 40903
+    assert body["message"] == "该手机号已注册,请直接登录或更换手机号"
+    assert len(body["data"]["errors"]) == 1
+    assert body["data"]["errors"][0]["field"] == "phone"
+    assert body["data"]["errors"][0]["code"] == 40903
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_duplicate_email_and_phone(client):
+    """邮箱 + 手机号都重,但 (country, reg_no) 新 → code=40902(40901 不在,40902 优先级最高),errors 长度 2。"""
+    r1 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r1.status_code == 200
+
+    payload = {
+        **SUPPLIER_PAYLOAD,
+        # email 重 + phone 重
+        "country_code": "MY",
+        "registration_no": "777666555444",
+        "language_preference": "ms",
+        "company_name": "Another Co",
+    }
+    r2 = await client.post("/api/v1/auth/register/supplier", json=payload)
+    assert r2.status_code == 409
+    body = r2.json()
+    assert body["code"] == 40902  # 40901 不在,40902 优先于 40903
+    assert body["message"] == "请修正以下问题"
+    errs = body["data"]["errors"]
+    assert len(errs) == 2
+    fields = {e["field"] for e in errs}
+    codes = {e["code"] for e in errs}
+    assert fields == {"email", "phone"}
+    assert codes == {40902, 40903}
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_duplicate_all_three(client):
+    """三者全重 → code=40901(优先级最高),errors 长度 3。"""
+    r1 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r1.status_code == 200
+
+    # 同 email + 同 phone + 同 (country, reg_no)
+    r2 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r2.status_code == 409
+    body = r2.json()
+    assert body["code"] == 40901
+    assert body["message"] == "请修正以下问题"
+    errs = body["data"]["errors"]
+    assert len(errs) == 3
+    fields = {e["field"] for e in errs}
+    codes = {e["code"] for e in errs}
+    assert fields == {"registration_no", "email", "phone"}
+    assert codes == {40901, 40902, 40903}
+
+
+@pytest.mark.asyncio
+async def test_supplier_register_response_structure(client):
+    """单错误也必须以数组形式返回 data.errors,前端可统一按数组解析。"""
+    r1 = await client.post("/api/v1/auth/register/supplier", json=SUPPLIER_PAYLOAD)
+    assert r1.status_code == 200
+
+    # 仅邮箱重 → 单错误
+    payload = {
+        **SUPPLIER_PAYLOAD,
+        "phone": "13900139999",
+        "country_code": "MY",
+        "registration_no": "666555444333",
+        "language_preference": "ms",
+        "company_name": "Another Co",
+    }
+    r2 = await client.post("/api/v1/auth/register/supplier", json=payload)
+    body = r2.json()
+    assert isinstance(body["data"]["errors"], list)
+    assert len(body["data"]["errors"]) == 1
 
 
 @pytest.mark.asyncio
