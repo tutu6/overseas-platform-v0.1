@@ -9,6 +9,7 @@ from app.db.models.supplier_organization import SupplierOrganization
 from app.db.models.buyer_member import BuyerMember
 from app.db.models.supplier_member import SupplierMember
 from app.db.models.audit_log import AuditLog
+from app.db.models.category import Category, CategoryLevel
 
 __all__ = [
     "User",
@@ -21,4 +22,6 @@ __all__ = [
     "BuyerMember",
     "SupplierMember",
     "AuditLog",
+    "Category",
+    "CategoryLevel",
 ]
