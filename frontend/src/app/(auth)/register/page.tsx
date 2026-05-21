@@ -132,7 +132,9 @@ export default function RegisterPage() {
     <>
       <div className="mb-6 text-center">
         <h2 className="text-xl font-bold text-gray-900">创建账户</h2>
-        <p className="mt-1 text-sm text-gray-400">选择您的角色开始注册</p>
+        {!role && (
+          <p className="mt-1 text-sm text-gray-400">选择您的角色开始注册</p>
+        )}
       </div>
 
       {/* 角色选择 */}
