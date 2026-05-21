@@ -23,11 +23,11 @@ import {
   validateSupplierPhone,
 } from "@/lib/validators";
 import {
-  BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION,
-  DUPLICATE_REGISTRATION_ERROR_MESSAGE,
   getCountryByCode,
+  multipleValidationBannerMessage,
   type CountryCode,
   type LanguageCode,
+  type RegistrationFieldError,
 } from "@/config/country-registration-rules";
 
 type FieldName =
@@ -64,6 +64,14 @@ function cls(err: string | null, extra = "") {
   return `${INPUT_BASE} ${err ? INPUT_ERR : INPUT_OK} ${extra}`;
 }
 
+// v1.5 Δ3:从 ApiError.data 中提取字段错误数组(后端契约:data.errors 永远是数组)
+function extractFieldErrors(data: unknown): RegistrationFieldError[] | null {
+  if (!data || typeof data !== "object") return null;
+  const errs = (data as { errors?: unknown }).errors;
+  if (!Array.isArray(errs) || errs.length === 0) return null;
+  return errs as RegistrationFieldError[];
+}
+
 export function StepForm({
   countryCode,
   languagePreference,
@@ -82,6 +90,8 @@ export function StepForm({
   const [errors, setErrors] = useState<Partial<Record<FieldName, string | null>>>({});
   const [touched, setTouched] = useState<Partial<Record<FieldName, boolean>>>({});
   const [submitError, setSubmitError] = useState("");
+  // v1.5 Δ3:后端返回的字段级错误(独立于客户端 errors,user 编辑该字段时清掉)
+  const [fieldServerErrors, setFieldServerErrors] = useState<Partial<Record<FieldName, string>>>({});
 
   // PRD v1.4 Δ6:提交按钮置灰 - 全字段校验状态的实时映射。
   // useMemo 依赖 draft、密码、country.code,任一变化都重算。
@@ -139,6 +149,14 @@ export function StepForm({
     }
     updateDraft({ [f]: v });
     if (errors[f]) setErrors((e) => ({ ...e, [f]: null }));
+    // v1.5 Δ3:用户开始修改字段 → 清掉该字段的服务器错误
+    if (fieldServerErrors[f]) {
+      setFieldServerErrors((s) => {
+        const next = { ...s };
+        delete next[f];
+        return next;
+      });
+    }
   };
 
   const blur = (f: FieldName) => {
@@ -150,8 +168,9 @@ export function StepForm({
     setErrors((e) => ({ ...e, [f]: validateField(f, val) }));
   };
 
+  // v1.5 Δ3:server 错误优先(已提交过、用户尚未修改),其次 touched 后的客户端错误
   const errOf = (f: FieldName): string | null =>
-    touched[f] ? errors[f] ?? null : null;
+    fieldServerErrors[f] ?? (touched[f] ? errors[f] ?? null : null);
 
   const validateAll = (): string => {
     const fields: FieldName[] = [
@@ -184,6 +203,7 @@ export function StepForm({
       return;
     }
     setSubmitError("");
+    setFieldServerErrors({});
     setSubmitting(true);
     try {
       await authApi.registerSupplier({
@@ -210,14 +230,32 @@ export function StepForm({
       }
       onSubmitted();
     } catch (e2) {
-      // PRD v1.4 Δ9:重复入驻识别走数字 code,严禁字符串比较
-      if (
-        e2 instanceof ApiError &&
-        e2.code === BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION
-      ) {
-        setSubmitError(DUPLICATE_REGISTRATION_ERROR_MESSAGE);
+      // v1.5 Δ3:后端统一返回 data.errors 数组(单错误数组长度为 1);按字段定位 + 顶部 banner
+      if (e2 instanceof ApiError) {
+        const errs = extractFieldErrors(e2.data);
+        if (errs) {
+          if (errs.length === 1) {
+            setSubmitError(errs[0].message);
+          } else {
+            setSubmitError(multipleValidationBannerMessage(errs.length));
+          }
+          const map: Partial<Record<FieldName, string>> = {};
+          for (const er of errs) {
+            map[er.field as FieldName] = er.message;
+          }
+          setFieldServerErrors(map);
+          // 滚动到首错字段
+          setTimeout(() => {
+            document.getElementById(errs[0].field)?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          }, 0);
+        } else {
+          setSubmitError(e2.message);
+        }
       } else {
-        setSubmitError(e2 instanceof ApiError ? e2.message : "注册失败,请稍后重试");
+        setSubmitError("注册失败,请稍后重试");
       }
     } finally {
       setSubmitting(false);

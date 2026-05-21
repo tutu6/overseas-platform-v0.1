@@ -176,6 +176,26 @@ export const DUPLICATE_REGISTRATION_ERROR_MESSAGE =
  */
 export const BUSINESS_CODE_DUPLICATE_SUPPLIER_REGISTRATION = 40901;
 
+/** v1.5 Δ2:邮箱已注册业务码(数字 40902)。前后端逐字一致。 */
+export const BUSINESS_CODE_EMAIL_ALREADY_REGISTERED = 40902;
+/** v1.5 Δ2:手机号已注册业务码(数字 40903)。前后端逐字一致。 */
+export const BUSINESS_CODE_PHONE_ALREADY_REGISTERED = 40903;
+
+export const EMAIL_ALREADY_REGISTERED_MESSAGE = "该邮箱已注册,请直接登录或更换邮箱";
+export const PHONE_ALREADY_REGISTERED_MESSAGE = "该手机号已注册,请直接登录或更换手机号";
+
+/** v1.5 Δ3:多错误并发时顶部 banner 模板;单错误不使用此文案 */
+export function multipleValidationBannerMessage(n: number): string {
+  return `请修正以下 ${n} 项问题`;
+}
+
+/** v1.5 Δ3:后端 data.errors 数组中单条错误的形状(前后端逐字一致) */
+export interface RegistrationFieldError {
+  field: string;
+  code: number;
+  message: string;
+}
+
 /** SupplierOrg 状态字符串(未来增 status 时统一加在此处) */
 export const STATUS_DRAFT = "DRAFT";
 
