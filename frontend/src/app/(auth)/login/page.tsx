@@ -36,7 +36,7 @@ function LoginContent() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ie = identifier ? null : "请填写邮箱 / 手机号";
+    const ie = identifier ? null : "请填写账号 / 邮箱 / 手机号";
     const pe = password ? null : "请填写密码";
     setIdErr(ie);
     setPwdErr(pe);
@@ -89,15 +89,15 @@ function LoginContent() {
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <div className="space-y-1.5">
           <Label htmlFor="identifier" className="text-sm font-semibold text-gray-700">
-            邮箱 / 手机号
+            账号 / 邮箱 / 手机号
           </Label>
           <input
             id="identifier"
             type="text"
             value={identifier}
             onChange={(e) => { setIdentifier(e.target.value); if (idErr) setIdErr(null); }}
-            onBlur={() => setIdErr(identifier ? null : "请填写邮箱 / 手机号")}
-            placeholder="输入邮箱或手机号"
+            onBlur={() => setIdErr(identifier ? null : "请填写账号 / 邮箱 / 手机号")}
+            placeholder="输入账号 / 邮箱 / 手机号"
             autoComplete="username"
             className={
               "w-full h-12 px-4 rounded-lg border bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 transition-all " +

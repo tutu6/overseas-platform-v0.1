@@ -44,3 +44,4 @@ legacy-demo.sql.gz
 # ---- 日志 ----
 *.log
 .claude/
+.gstack/
