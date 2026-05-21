@@ -426,7 +426,7 @@ export function StepForm({
               <Loader2 className="h-4 w-4 animate-spin" /> 提交中...
             </>
           ) : (
-            "提交入驻申请"
+            "提交注册申请"
           )}
         </button>
       </div>
