@@ -5,11 +5,8 @@ import { LogOut, Settings, Bug, Sparkles } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useDebugMode } from "@/stores/uiStore";
 import { useLogout } from "@/hooks/useAuth";
+import { BRAND } from "@/config/brand";
 import type { RoleCode } from "@/lib/auth";
-
-// TODO(品牌):待团队定调
-const BRAND_NAME = "央企海外工程供应链平台";
-const BRAND_LOGO_CHAR = "央";
 
 const ROLE_BADGE_COLOR: Record<RoleCode, string> = {
   BUYER: "#003366",
@@ -37,10 +34,10 @@ export function AppHeader({ showDebugToggle = false }: { showDebugToggle?: boole
         {/* 左:品牌 */}
         <Link href="/" className="flex items-center gap-2.5">
           <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#003366] to-[#0F4C81]">
-            <span className="text-sm font-black text-white">{BRAND_LOGO_CHAR}</span>
+            <span className="text-sm font-black text-white">{BRAND.logoChar}</span>
             <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white bg-[#FF6B35]" />
           </div>
-          <span className="text-sm font-semibold text-slate-800">{BRAND_NAME}</span>
+          <span className="text-sm font-semibold text-slate-800">{BRAND.name}</span>
         </Link>
 
         {/* 右:调试 toggle + 用户 */}
