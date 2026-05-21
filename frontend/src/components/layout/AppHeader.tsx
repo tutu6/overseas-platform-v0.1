@@ -1,26 +1,28 @@
 "use client";
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { LogOut, Settings, Bug, Sparkles } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Bug,
+  ChevronDown,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  Sparkles,
+} from "lucide-react";
 
 import { useAuthStore } from "@/stores/authStore";
 import { useDebugMode } from "@/stores/uiStore";
 import { useLogout } from "@/hooks/useAuth";
 import { BRAND } from "@/config/brand";
+import { defaultDashboardOf } from "@/config/navigation";
 import type { RoleCode } from "@/lib/auth";
 
-const ROLE_BADGE_COLOR: Record<RoleCode, string> = {
-  BUYER: "#003366",
-  SUPPLIER: "#FF6B35",
-  OPERATOR: "#0F4C81",
-  ADMIN: "#475569",
-};
-
-const ROLE_LABEL: Record<RoleCode, string> = {
-  BUYER: "采购方",
-  SUPPLIER: "供应商",
-  OPERATOR: "平台运营",
-  ADMIN: "系统管理员",
+const ROLE_PILL: Record<RoleCode, { label: string; cls: string }> = {
+  BUYER:    { label: "采购方",     cls: "bg-blue-50 text-blue-700 border-blue-200" },
+  SUPPLIER: { label: "供应商",     cls: "bg-orange-50 text-orange-700 border-orange-200" },
+  OPERATOR: { label: "平台运营",   cls: "bg-sky-50 text-sky-700 border-sky-200" },
+  ADMIN:    { label: "系统管理员", cls: "bg-slate-100 text-slate-700 border-slate-200" },
 };
 
 /** 顶部 Header(工作台 + 公开区共用)。 */
@@ -34,7 +36,6 @@ export function AppHeader({
 }) {
   const user = useAuthStore((s) => s.user);
   const [debugMode, setDebugMode] = useDebugMode();
-  const logout = useLogout();
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -73,35 +74,7 @@ export function AppHeader({
           )}
 
           {user ? (
-            <>
-              {user.roles.map((r) => (
-                <span
-                  key={r}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                  style={{ backgroundColor: ROLE_BADGE_COLOR[r] ?? "#64748b" }}
-                  title={`角色:${ROLE_LABEL[r]}`}
-                >
-                  {r}
-                </span>
-              ))}
-              <span className="hidden text-xs text-slate-500 sm:inline">
-                {user.username || user.email}
-              </span>
-              <Link
-                href="/account"
-                title="账户设置"
-                className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <Settings className="h-4 w-4" />
-              </Link>
-              <button
-                onClick={logout}
-                title="退出登录"
-                className="flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2.5 text-xs text-slate-600 hover:bg-slate-50"
-              >
-                <LogOut className="h-3.5 w-3.5" /> 退出
-              </button>
-            </>
+            <UserMenu />
           ) : (
             <Link
               href="/login"
@@ -113,5 +86,150 @@ export function AppHeader({
         </div>
       </div>
     </header>
+  );
+}
+
+/** 用户下拉菜单:头像 + 名字 + chevron 触发,展开后展示用户信息卡 + 入口 + 退出。 */
+function UserMenu() {
+  const user = useAuthStore((s) => s.user)!;
+  const logout = useLogout();
+  const pathname = usePathname();
+
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // 路由变化自动关闭
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  // 点外部关闭
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // ESC 关闭
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
+
+  const displayName = user.username || user.email;
+  const initial = (displayName?.[0] ?? "U").toUpperCase();
+  const primaryRole = user.roles[0];
+  const dashboardHref = defaultDashboardOf(user.roles);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={
+          "flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 transition-colors " +
+          (open
+            ? "border-[#003366]/30 bg-slate-50"
+            : "border-slate-200 hover:border-[#003366]/30 hover:bg-slate-50")
+        }
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#003366] to-[#0F4C81] text-xs font-bold text-white shadow-sm">
+          {initial}
+        </span>
+        <span className="max-w-[120px] truncate text-sm font-medium text-slate-700">
+          {displayName}
+        </span>
+        <ChevronDown
+          className={
+            "h-3.5 w-3.5 text-slate-400 transition-transform duration-200 " +
+            (open ? "rotate-180" : "")
+          }
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-40 mt-2 w-60 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+        >
+          {/* 用户信息卡 */}
+          <div className="border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#003366] to-[#0F4C81] text-sm font-bold text-white">
+                {initial}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">{displayName}</p>
+                {user.email && user.email !== displayName && (
+                  <p className="truncate text-xs text-slate-400">{user.email}</p>
+                )}
+              </div>
+            </div>
+            {user.roles.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {user.roles.map((r) => {
+                  const meta = ROLE_PILL[r];
+                  return (
+                    <span
+                      key={r}
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta?.cls ?? "border-slate-200 bg-slate-50 text-slate-600"}`}
+                    >
+                      {meta?.label ?? r}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 菜单项 */}
+          <div className="py-1.5">
+            {primaryRole && (
+              <Link
+                href={dashboardHref}
+                role="menuitem"
+                className="flex items-center gap-2.5 px-4 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-[#003366]"
+              >
+                <LayoutDashboard className="h-4 w-4 text-slate-400" />
+                控制台
+              </Link>
+            )}
+            <span
+              role="menuitem"
+              aria-disabled
+              title="账户设置改版中"
+              className="flex cursor-not-allowed select-none items-center gap-2.5 px-4 py-2 text-sm text-slate-400"
+            >
+              <Settings className="h-4 w-4 text-slate-300" />
+              账户设置
+              <span className="ml-auto text-[10px] text-slate-300">改版中</span>
+            </span>
+          </div>
+
+          {/* 退出 */}
+          <div className="border-t border-slate-100 py-1.5">
+            <button
+              onClick={() => {
+                setOpen(false);
+                logout();
+              }}
+              role="menuitem"
+              className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50"
+            >
+              <LogOut className="h-4 w-4" />
+              退出登录
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
