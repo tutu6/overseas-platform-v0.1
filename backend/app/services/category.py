@@ -26,7 +26,9 @@ async def list_flat(
         stmt = stmt.where(Category.level == level)
     if parent_code is not None:
         stmt = stmt.where(Category.parent_code == parent_code)
-    stmt = stmt.order_by(Category.level, Category.sort_order, Category.code)
+    stmt = stmt.order_by(
+        Category.level, Category.parent_code, Category.sort_order, Category.code
+    )
 
     rows = (await db.execute(stmt)).scalars().all()
     return [CategoryNode.model_validate(r) for r in rows]
@@ -41,7 +43,9 @@ async def get_tree(
     stmt = select(Category)
     if is_active is not None:
         stmt = stmt.where(Category.is_active == is_active)
-    stmt = stmt.order_by(Category.level, Category.sort_order, Category.code)
+    stmt = stmt.order_by(
+        Category.level, Category.parent_code, Category.sort_order, Category.code
+    )
 
     rows = (await db.execute(stmt)).scalars().all()
 
