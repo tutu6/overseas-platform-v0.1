@@ -59,13 +59,19 @@ export function CategoryCascader({
     () => tree.find((n) => n.code === value.level1Code),
     [tree, value.level1Code]
   );
-  const level2Options = level1Node?.children ?? [];
+  const level2Options = React.useMemo<CategoryTreeNode[]>(
+    () => level1Node?.children ?? [],
+    [level1Node]
+  );
 
   const level2Node = React.useMemo<CategoryTreeNode | undefined>(
     () => level2Options.find((n) => n.code === value.level2Code),
     [level2Options, value.level2Code]
   );
-  const level3Options = level2Node?.children ?? [];
+  const level3Options = React.useMemo<CategoryTreeNode[]>(
+    () => level2Node?.children ?? [],
+    [level2Node]
+  );
 
   const baseDisabled = disabled || isLoading;
 
