@@ -9,11 +9,19 @@ from starlette.requests import Request
 
 from app.audit.constants import AuditAction, AuditResourceType
 from app.audit.logger import write_audit
-from app.constants.country_registration import DUPLICATE_REGISTRATION_ERROR_MESSAGE
+from app.constants.country_registration import (
+    BUSINESS_CODE_EMAIL_ALREADY_REGISTERED,
+    BUSINESS_CODE_PHONE_ALREADY_REGISTERED,
+    BUSINESS_CODE_SUPPLIER_ALREADY_REGISTERED,
+    DUPLICATE_REGISTRATION_ERROR_MESSAGE,
+    EMAIL_ALREADY_REGISTERED_MESSAGE,
+    PHONE_ALREADY_REGISTERED_MESSAGE,
+)
 from app.core.exceptions import (
     AccountDisabledError,
     ConflictError,
     InvalidCredentialsError,
+    MultipleValidationError,
     NotFoundError,
     SupplierAlreadyRegisteredError,
     TooManyAttemptsError,
@@ -219,12 +227,12 @@ async def register_supplier(
     """
     if not validate_password_strength(password):
         raise ValidationFailedError(PASSWORD_RULE_MESSAGE)
-    if await _email_exists(db, email):
-        raise ConflictError("Email 已存在")
-    if phone and await _phone_exists(db, phone):
-        raise ConflictError("手机号已存在")
-    # 复合唯一性校验:同 country + 同 reg_no 才算重复
-    row = await db.execute(
+
+    # v1.5 Δ3:收集所有唯一性冲突,一次性返回(不短路)
+    # WHY:用户单次提交想一次拿到所有错误,避免反复试错
+    errors: list[dict] = []
+    # 顺序:registration_no(40901) → email(40902) → phone(40903),前端按该顺序定位首错滚动
+    sup_row = await db.execute(
         select(SupplierOrganization.id).where(
             and_(
                 SupplierOrganization.country_code == country_code,
@@ -232,8 +240,27 @@ async def register_supplier(
             )
         )
     )
-    if row.scalar_one_or_none() is not None:
-        raise SupplierAlreadyRegisteredError(DUPLICATE_REGISTRATION_ERROR_MESSAGE)
+    if sup_row.scalar_one_or_none() is not None:
+        errors.append({
+            "field": "registration_no",
+            "code": BUSINESS_CODE_SUPPLIER_ALREADY_REGISTERED,
+            "message": DUPLICATE_REGISTRATION_ERROR_MESSAGE,
+        })
+    if await _email_exists(db, email):
+        errors.append({
+            "field": "email",
+            "code": BUSINESS_CODE_EMAIL_ALREADY_REGISTERED,
+            "message": EMAIL_ALREADY_REGISTERED_MESSAGE,
+        })
+    if phone and await _phone_exists(db, phone):
+        errors.append({
+            "field": "phone",
+            "code": BUSINESS_CODE_PHONE_ALREADY_REGISTERED,
+            "message": PHONE_ALREADY_REGISTERED_MESSAGE,
+        })
+
+    if errors:
+        raise MultipleValidationError(errors)
 
     user = User(
         email=email,
