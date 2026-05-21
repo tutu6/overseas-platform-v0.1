@@ -4,6 +4,7 @@ import { ArrowRight, ShoppingCart, Sparkles, ShieldCheck, Building2 } from "luci
 
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { useAuthStore } from "@/stores/authStore";
+import { BRAND } from "@/config/brand";
 import { defaultDashboardOf } from "@/config/navigation";
 
 const FEATURES = [
@@ -23,10 +24,11 @@ export default function HomePage() {
         <div className="mx-auto max-w-4xl">
           <p className="text-sm uppercase tracking-widest text-[#FF6B35]">MVP · 第一轮</p>
           <h1 className="mt-3 text-4xl font-black leading-tight sm:text-5xl">
-            央企海外工程供应链平台
+            {BRAND.name}
           </h1>
+          <p className="mt-2 text-base font-medium text-white/80">{BRAND.tagline}</p>
           <p className="mt-4 max-w-2xl text-base text-white/70">
-            面向中国央企海外 EPC 项目的 B2B 供应链平台。
+            {BRAND.description}。
             本轮已交付的是认证 / RBAC / 审计底座 + 完整导航 + 侧边栏可视化,业务模块在后续 prompt 中陆续上线。
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
