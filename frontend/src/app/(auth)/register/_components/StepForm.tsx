@@ -221,7 +221,10 @@ export function StepForm({
         sessionStorage.setItem(
           "prefill_login",
           JSON.stringify({
-            identifier: draft.phone || draft.email,
+            // WHY 用 email 不用 phone:SUPPLIER phone 走 i18n 占位校验(允许 +、空格、-),
+            // 而 login _classify_identifier 仅识别纯 11 位中国手机号,prefill 国际格式 phone
+            // 会被当 username 查必然 401。TODO(I18N-PHONE):各国 phone 精确规则就绪后再放开。
+            identifier: draft.email,
             password,
           }),
         );
