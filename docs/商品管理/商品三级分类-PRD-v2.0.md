@@ -256,7 +256,7 @@ gantt
 ## 11. 参考文档
 
 - `docs/商品三级分类-PRD-v1.0.md` — 分类底座 PRD,本轮所有数据/API 契约的源
-- `docs/MVP业务流程共识_v1.2.md` — 业务流程(严选商城 = 流程 2 的入口)
+- `docs/MVP业务流程共识_v1.4.md` — 业务流程(严选商城 = 流程 2 的入口)
 - `CLAUDE.md` — 项目级约束
 - `/Users/liujingjing/Documents/overseas-pro/overseas-supply-platform/src/app/(marketing)/mall/page.tsx` — **核心复用源**
 - `/Users/liujingjing/Documents/overseas-pro/overseas-supply-platform/src/components/layout/Header.tsx` — 顶部导航参考
