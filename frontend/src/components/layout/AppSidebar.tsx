@@ -6,7 +6,6 @@ import { Lock } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { useDebugMode } from "@/stores/uiStore";
 import {
-  PUBLIC_NAV,
   WORKSPACES,
   type NavItem,
   type Workspace,
@@ -48,11 +47,6 @@ export function AppSidebar() {
   return (
     <aside className="w-60 shrink-0 border-r border-slate-200 bg-white">
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-3 text-sm">
-        <SectionHeader label="公开区" />
-        {PUBLIC_NAV.map((item) => (
-          <NavLink key={item.path} item={item} currentPath={pathname} access={checkAccess(item)} debugMode={debugMode} />
-        ))}
-
         {currentWs && (
           <WorkspaceGroups workspace={currentWs} currentPath={pathname} debugMode={debugMode} checkAccess={checkAccess} />
         )}
