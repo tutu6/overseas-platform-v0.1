@@ -38,6 +38,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.QUOTE_READ,
         Permissions.ORDER_READ,
         Permissions.ORDER_WRITE,
+        # 信用评估 — 仅查看(工单 §3.7)
+        Permissions.CREDIT_READ,
     ],
     "SUPPLIER": [
         *_AUTH_BASE,
@@ -57,6 +59,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.ORDER_CHECKIN,
         Permissions.MEMBERSHIP_READ,
         Permissions.MEMBERSHIP_WRITE,
+        # 信用评估 — 仅查看(工单 §3.7)
+        Permissions.CREDIT_READ,
     ],
     "OPERATOR": [
         *_AUTH_BASE,
@@ -76,6 +80,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.ORDER_READ,
         Permissions.MEMBERSHIP_READ,
         Permissions.RISK_READ,
+        # 信用评估 — 全权(读 / 写 / 触发重算)
+        Permissions.CREDIT_READ,
+        Permissions.CREDIT_WRITE,
+        Permissions.CREDIT_RECOMPUTE,
     ],
     "ADMIN": [
         *_AUTH_BASE,
@@ -85,5 +93,10 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.PERMISSION_MANAGE,
         Permissions.SYSTEM_CONFIG,
         Permissions.SYSTEM_AUDIT,
+        # 信用评估 — 工单 §3.7 显式授予 ADMIN 三个 credit:* 权限点
+        # (技术方案 §六 视信用评估为"专业版企查查"全员查询能力,故 Q25 在此放宽)
+        Permissions.CREDIT_READ,
+        Permissions.CREDIT_WRITE,
+        Permissions.CREDIT_RECOMPUTE,
     ],
 }
