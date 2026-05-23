@@ -6,24 +6,17 @@ import { Search, X, Building2, MapPin } from "lucide-react";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { RouteGuard } from "@/components/auth/RouteGuard";
 import { GradeBadge } from "@/components/credit/GradeBadge";
+import { COUNTRIES } from "@/config/country-registration-rules";
 import {
   creditApi,
   type CompanyListItem,
   type SearchHistoryItem,
 } from "@/lib/api/credit";
 
-// 9 国国别下拉(对齐项目 8 国 + 中国候补;ISO-2 + 中文名)
+// 9 国国别下拉(单一可信源:@/config/country-registration-rules · COUNTRIES)
 const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
   { code: "", name: "全部国家" },
-  { code: "SA", name: "沙特阿拉伯" },
-  { code: "AE", name: "阿联酋" },
-  { code: "ID", name: "印度尼西亚" },
-  { code: "PK", name: "巴基斯坦" },
-  { code: "MA", name: "摩洛哥" },
-  { code: "EG", name: "埃及" },
-  { code: "NG", name: "尼日利亚" },
-  { code: "KE", name: "肯尼亚" },
-  { code: "TZ", name: "坦桑尼亚" },
+  ...COUNTRIES.map((c) => ({ code: c.code, name: c.nameZh })),
 ];
 
 function CreditInner() {
