@@ -539,4 +539,39 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 ---
 
+## Bug 修复纪律 ⭐
+
+修 bug 前**必须先理解错误的根本原因**,不为了改而改、不靠"改一下试试看"。
+
+每次修 bug 必须能讲清楚这 3 件事(写进 commit message 或 PR 描述):
+
+1. **现象**:用户看到的错误表现是什么(报错文本 / 异常截图 / 数据状态)
+2. **根因**:为什么会发生 — 从现象沿调用链反推到代码层面的具体原因
+   - 不能停在"加这个字段就好了"这种表层结论
+   - 要回答"为什么这个字段缺了"、"为什么这条逻辑没走通"
+3. **修复**:为什么这个改动能解决根因 — 改动跟根因之间的逻辑关系要清晰
+
+**反模式(禁止)**:
+- ❌ "试着加个 try/except 看会不会好" → 没定位就盖问题
+- ❌ "把这个字段改成可选" → 没确认为什么这个字段会空
+- ❌ "改一下数据让它过 → 不动代码" → 数据修复 ≠ bug 修复,逻辑可能还错
+- ❌ "把限制宽放一下让通过" → 限制本来对不对都不知道就放宽
+
+**正确示范(commit message 模板)**:
+```
+fix(xxx): <一句话现象>
+
+现象:用户在 /credit/companies/N 详情页看到 '暂无工商基本信息'
+根因:Pydantic v2 + from_attributes=True 只读已声明字段。BasicData
+     schema 没声明 id,所以 model_validate(ORM row) 后 basic.id 永远是
+     None;ScoringEngine 写 snapshot 时 basic_data_id 也是 None;
+     详情页 if snapshot.basic_data_id is None: skip。
+修:三个 Pydantic schema 都加 id 字段,model_validate 就会把 ORM 的 id
+   拉过来,FK 链路通了。
+```
+
+如果一时找不到根因,**先记 TODO + 不动代码** 比 "随便改一刀让它先过" 强得多。
+
+---
+
 *文档结束*
