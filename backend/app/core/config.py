@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     # 日志
     LOG_LEVEL: str = "INFO"
 
+    # ---- LLM(信用评估 AI 综合评价 + 对话追问)----
+    # DashScope OpenAI 兼容端点 + openai SDK 调用(便于后续切其他国产模型)
+    # 真实密钥**绝不**进 Git;ECS 上由 .env.production 注入
+    DASHSCOPE_API_KEY: str = ""
+    QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    QWEN_CHAT_MODEL: str = "qwen-plus"
+    QWEN_CHAT_TEMPERATURE: float = 0.2
+    QWEN_TIMEOUT_SECONDS: float = 30.0
+
     # CORS(逗号分隔,运行时拆为列表)
     CORS_ORIGINS_RAW: str = Field(
         default="http://localhost:3000", alias="CORS_ORIGINS"
