@@ -48,11 +48,15 @@ export interface SnapshotOut {
   id: number;
   total_score: number;
   grade: Grade;
-  /** v0.2:同时返回自然分(未 override)和最终分;历史 v0.1 快照这 5 字段为 null = 无 override */
+  /** 后端数据契约保留字段,本期前端不消费(v0.2-Δ2 回滚后:UI 不展示 natural/override) */
   dimension_1_natural_score: number | null;
+  /** 同上 */
   dimension_2_natural_score: number | null;
+  /** 同上 */
   dimension_3_natural_score: number | null;
+  /** 同上 */
   dimension_4_natural_score: number | null;
+  /** 同上;数组形态 */
   dimension_overrides: DimensionOverrideHit[] | null;
   rule_version: number;
   trigger_type: string;
