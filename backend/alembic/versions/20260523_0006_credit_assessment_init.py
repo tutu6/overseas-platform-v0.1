@@ -269,6 +269,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.Column("company_id", sa.Integer(), nullable=False),
         sa.Column("searched_at", sa.DateTime(), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["company_id"], ["credit_company.id"], name="fk_credit_search_company"
