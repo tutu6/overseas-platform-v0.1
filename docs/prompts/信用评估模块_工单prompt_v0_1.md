@@ -275,6 +275,14 @@ seed 时**不调 LLM 生成 ai_summary**(节约启动时间),ai_summary 留 null
   - 下方对话区:用户输入框 + 历史消息
   - 用户发送消息:`POST /credit/ai/conversations/{id}/messages`,**fetch + ReadableStream 处理 SSE 流**,逐字渲染
   - 多轮对话:发送时拼装当前会话的所有历史消息(从 conversation API 拿)
+  - **输入框风格(Claude Code 类终端风)**:
+    - 多行 `<textarea>`,初始 2 行,内容增多自动撑到 8 行,超出后内部滚动
+    - Enter 直接发送 / Shift + Enter 换行
+    - 中文输入法选词期间(`nativeEvent.isComposing=true`)Enter **不**触发发送
+    - 圆角线框,焦点态边框由 slate-300 → 主色 `#003366`
+    - 右下角圆形 send 按钮(`ArrowUp` 图标),空文本时灰、有效时主色
+    - 流式中输入框禁用、placeholder 变 "AI 正在回复…"
+    - 输入框下方一行小灰字键盘提示:"Enter 发送 · Shift + Enter 换行"
 
 进入页面时若无对话会话,先调 `POST /credit/ai/conversations` 创建一个。
 
