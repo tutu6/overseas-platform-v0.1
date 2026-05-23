@@ -37,9 +37,9 @@ class QwenChatService(LLMService):
 
     def _check_configured(self) -> None:
         if not self._configured:
-            raise LLMUnavailableError(
-                "DASHSCOPE_API_KEY 未配置,LLM 不可用"
-            )
+            # message 进服务端日志即可,绝对不要泄露具体 env 变量名给前端
+            # (前端的固定文案在 credit.py SSE event 出口控制)
+            raise LLMUnavailableError("LLM credentials not configured")
 
     async def generate(self, prompt: str) -> str:
         self._check_configured()

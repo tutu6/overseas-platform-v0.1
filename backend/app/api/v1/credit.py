@@ -511,7 +511,11 @@ async def send_ai_message(
     llm = _llm_service()
 
     async def event_stream() -> AsyncIterator[bytes]:
-        """SSE 帧格式:`data: <text>\\n\\n`。流完一行 `data: [DONE]\\n\\n`。"""
+        """SSE 帧格式:`data: <text>\\n\\n`。流完一行 `data: [DONE]\\n\\n`。
+
+        客户端只看通用文案,不暴露具体 LLM 厂商/凭据/上游错误细节;
+        具体原因写服务端日志(LLMUnavailableError 内部 message + logger)。
+        """
         collected: list[str] = []
         try:
             async for chunk in llm.stream_chat(llm_messages):
@@ -520,12 +524,13 @@ async def send_ai_message(
                 safe = chunk.replace("\n", "\\n")
                 yield f"data: {safe}\n\n".encode("utf-8")
         except LLMUnavailableError as exc:
-            err = json.dumps({"error": str(exc)}, ensure_ascii=False)
+            logger.warning("SSE LLM 不可用: %s", exc)
+            err = json.dumps({"error": "AI 服务暂时不可用,请稍后再试"}, ensure_ascii=False)
             yield f"event: error\ndata: {err}\n\n".encode("utf-8")
             return
         except Exception as exc:  # noqa: BLE001
-            logger.exception("SSE 流式中断")
-            err = json.dumps({"error": "internal_error"}, ensure_ascii=False)
+            logger.exception("SSE 流式中断: %s", exc)
+            err = json.dumps({"error": "AI 服务暂时不可用,请稍后再试"}, ensure_ascii=False)
             yield f"event: error\ndata: {err}\n\n".encode("utf-8")
             return
 
