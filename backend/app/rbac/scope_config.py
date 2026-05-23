@@ -5,8 +5,9 @@ v3 §4 设计:
 - scope 是简单查表 (角色, 资源域) → ALL/ORG/OWN/NONE
 - 不做策略引擎、不支持优先级、不支持表达式 DSL
 
-资源域权威清单(v3 §2):15 个
-  supplier / product / country / project / purchase_list / cart
+资源域权威清单(v3 §2 + 信用评估 §六):16 个
+  supplier / product / country / credit
+  project / purchase_list / cart
   rfq / quote / order / membership / risk
   user / role / permission / system
 """
@@ -28,6 +29,7 @@ RESOURCES: dict[str, dict[str, str]] = {
     "supplier":       {"name": "供应商档案", "module": "业务-档案"},
     "product":        {"name": "商品 SKU",   "module": "业务-档案"},
     "country":        {"name": "国别准入",   "module": "业务-档案"},
+    "credit":         {"name": "信用评估",   "module": "业务-档案"},
     "project":        {"name": "项目",       "module": "业务-交易"},
     "purchase_list":  {"name": "采购清单",   "module": "业务-交易"},
     "cart":           {"name": "购物车",     "module": "业务-交易"},
@@ -57,6 +59,7 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.ALL,
         "product":       Scope.ALL,
         "country":       Scope.ALL,
+        "credit":        Scope.ALL,
         "project":       Scope.ORG,
         "purchase_list": Scope.ORG,
         "cart":          Scope.OWN,
@@ -74,6 +77,7 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.OWN,
         "product":       Scope.OWN,
         "country":       Scope.ALL,
+        "credit":        Scope.ALL,
         "project":       Scope.NONE,
         "purchase_list": Scope.NONE,
         "cart":          Scope.NONE,
@@ -91,6 +95,7 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.ALL,
         "product":       Scope.ALL,
         "country":       Scope.ALL,
+        "credit":        Scope.ALL,
         "project":       Scope.ALL,
         "purchase_list": Scope.ALL,
         "cart":          Scope.NONE,
@@ -108,6 +113,8 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.NONE,
         "product":       Scope.NONE,
         "country":       Scope.NONE,
+        # 信用评估视为"专业版企查查"全员查询能力,Q25 在此放宽(工单 §3.7 + 技术方案 §六)
+        "credit":        Scope.ALL,
         "project":       Scope.NONE,
         "purchase_list": Scope.NONE,
         "cart":          Scope.NONE,
@@ -165,6 +172,7 @@ RESOURCE_PRIMARY_READ: dict[str, str] = {
     "supplier":      "supplier:read",
     "product":       "product:read",
     "country":       "country:read",
+    "credit":        "credit:read",
     "project":       "project:read",
     "purchase_list": "purchase_list:read",
     "cart":          "cart:read",

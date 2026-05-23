@@ -243,8 +243,12 @@ async def run_all_seeds(db: AsyncSession) -> None:
         await seed_buyer_org(db)
         await seed_demo_internal_accounts(db)
         await seed_demo_buyer_account(db)
+        # 信用评估:评分模型骨架 + 4 家 demo 企业(工单 §C3)
+        from app.seed_credit import seed_credit_module
+
+        await seed_credit_module(db)
     else:
         logger.info(
             "Seed: SEED_DEMO_ACCOUNTS=false → 跳过 demo 内容(中建三局组织 / "
-            "admin / operator / buyer demo 账号)"
+            "admin / operator / buyer demo 账号 / 信用评估 demo 企业)"
         )
