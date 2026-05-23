@@ -40,10 +40,10 @@ class CreditCompanyFinanceData(Base, TimestampMixin):
         ForeignKey("credit_company.id", name="fk_credit_finance_company"),
         nullable=False,
     )
-    revenue_trend: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    revenue_trend: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # 资产负债率(%),精度 5,小数 2
     debt_ratio: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
-    cash_flow_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    cash_flow_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     raw_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     data_source: Mapped[str] = mapped_column(String(20), nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -190,6 +190,8 @@ class ScoringEngine:
 
     @staticmethod
     def _to_eval_dict(ctx: EvaluationInput) -> dict[str, Any]:
+        # `mode="json"` 把 date/datetime/Decimal 都转成 JSON 友好类型;
+        # `today` 也走 isoformat,evaluators 内 _today() 会 parse 回 date。
         return {
             "company_id": ctx.company_id,
             "country_code": ctx.country_code,
@@ -197,7 +199,7 @@ class ScoringEngine:
             "finance": ctx.finance.model_dump(mode="json"),
             "legal": ctx.legal.model_dump(mode="json"),
             "certifications": [c.model_dump(mode="json") for c in ctx.certifications],
-            "today": ctx.today,
+            "today": ctx.today.isoformat(),
         }
 
     @staticmethod

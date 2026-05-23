@@ -44,7 +44,15 @@ def _certs(data: dict) -> list[dict]:
 
 
 def _today(data: dict) -> date:
-    return data.get("today") or date.today()
+    v = data.get("today")
+    if v is None:
+        return date.today()
+    if isinstance(v, str):
+        try:
+            return date.fromisoformat(v)
+        except ValueError:
+            return date.today()
+    return v
 
 
 def _country(data: dict) -> str:
@@ -120,8 +128,9 @@ def basic_status_cancelled(data: dict) -> bool:
 #   - None/空 → 无法查证
 
 def basic_shareholders_clear(data: dict) -> bool:
+    """股权结构清晰:文本含百分比标记(说明披露了股权比例)。"""
     s = _basic(data).get("shareholders") or ""
-    return ("%" in s) and (("公司" in s) or ("持股" in s))
+    return "%" in s
 
 
 def basic_shareholders_partial(data: dict) -> bool:
