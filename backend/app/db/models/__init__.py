@@ -31,6 +31,7 @@ from app.db.models.role_permission import RolePermission
 from app.db.models.score_audit_log import ScoreAuditLog
 from app.db.models.score_detail import ScoreDetail
 from app.db.models.score_dimension import DimensionCode, ScoreDimension
+from app.db.models.score_dimension_override import ScoreDimensionOverride
 from app.db.models.score_rule import ScoreRule
 from app.db.models.score_snapshot import Grade, ScoreSnapshot, TriggerType
 from app.db.models.score_subitem import ScoreSubitem
@@ -59,6 +60,7 @@ __all__ = [
     "DimensionCode",
     "ScoreSubitem",
     "ScoreRule",
+    "ScoreDimensionOverride",
     # credit assessment - 企业与数据快照
     "CreditCompany",
     "CreditCompanyBasicData",

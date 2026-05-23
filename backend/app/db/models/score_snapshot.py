@@ -94,5 +94,24 @@ class ScoreSnapshot(Base, TimestampMixin):
     ai_summary_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
+    # v0.2 重构:同时记录"自然分"和"override 后的最终分"
+    # dimension_N_score 是最终分(可能被 override 覆盖);natural 是没有 override 的子项加总分
+    # dimension_overrides 数组记录命中的维度级 override 明细
+    # 历史(v0.1)快照这 5 个字段为 NULL,等同于"无 override 命中"
+    dimension_1_natural_score: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True
+    )
+    dimension_2_natural_score: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True
+    )
+    dimension_3_natural_score: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True
+    )
+    dimension_4_natural_score: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True
+    )
+    dimension_overrides: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     calculated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
