@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, Globe, Calendar, Banknote, Building2, RefreshCw } from "lucide-react";
 
 import { PublicLayout } from "@/components/layout/PublicLayout";
@@ -183,37 +183,7 @@ function DetailInner({ companyId }: { companyId: number }) {
           12 个子项明细
         </summary>
         <div className="mt-3 overflow-x-auto">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-2 py-1.5 text-left">维度</th>
-                <th className="px-2 py-1.5 text-left">子项</th>
-                <th className="px-2 py-1.5 text-right">得分</th>
-                <th className="px-2 py-1.5 text-left">命中规则</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.details.map((d) => (
-                <tr
-                  key={d.subitem_code}
-                  className="border-t border-slate-100 hover:bg-slate-50"
-                >
-                  <td className="px-2 py-1.5 text-slate-600">{d.dimension_name}</td>
-                  <td className="px-2 py-1.5 text-slate-900">{d.subitem_name}</td>
-                  <td className="px-2 py-1.5 text-right font-medium">
-                    {d.score} <span className="text-slate-400">/ {d.max_score}</span>
-                  </td>
-                  <td className="px-2 py-1.5 text-slate-500">
-                    {d.is_default_score ? (
-                      <span className="text-amber-600">(默认分)</span>
-                    ) : (
-                      d.hit_rule_description || "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <SubitemTable data={data} />
         </div>
       </details>
 
@@ -246,6 +216,105 @@ function InfoRow({
     </div>
   );
 }
+
+/** 12 子项明细表:维度列合并单元格,维度级 override 折叠到维度标题旁。 */
+function SubitemTable({ data }: { data: CompanyDetailOut }) {
+  // 按 dimension_code 分组,保持后端返回顺序(dim 1-4)
+  const groups: Array<{
+    code: string;
+    name: string;
+    rows: typeof data.details;
+    score: number;
+    maxScore: number;
+    overrideNote: string | null;
+  }> = [];
+
+  for (const d of data.details) {
+    let g = groups.find((x) => x.code === d.dimension_code);
+    if (!g) {
+      // 维度元信息从 data.dimensions 取(更可靠)
+      const dim = data.dimensions.find((x) => x.code === d.dimension_code);
+      g = {
+        code: d.dimension_code,
+        name: d.dimension_name,
+        rows: [],
+        score: dim?.score ?? 0,
+        maxScore: dim?.max_score ?? 0,
+        overrideNote: null,
+      };
+      groups.push(g);
+    }
+    g.rows.push(d);
+  }
+
+  // 检测维度级 override:同维度内所有子项 hit_rule_description 完全相同 且 score 全 0 / 全相等
+  // → 视为 override,把那条描述提到维度标题,子项行的"命中规则"显示 "—"
+  for (const g of groups) {
+    if (g.rows.length < 2) continue;
+    const firstDesc = g.rows[0].hit_rule_description;
+    if (!firstDesc) continue;
+    const allSame = g.rows.every(
+      (r) => r.hit_rule_description === firstDesc
+    );
+    if (allSame) g.overrideNote = firstDesc;
+  }
+
+  return (
+    <table className="min-w-full text-xs">
+      <thead className="bg-slate-50 text-slate-500">
+        <tr>
+          <th className="w-44 px-3 py-2 text-left">维度</th>
+          <th className="px-3 py-2 text-left">子项</th>
+          <th className="w-20 px-3 py-2 text-right">得分</th>
+          <th className="px-3 py-2 text-left">命中规则</th>
+        </tr>
+      </thead>
+      <tbody>
+        {groups.map((g) => (
+          <React.Fragment key={g.code}>
+            {g.rows.map((d, idx) => (
+              <tr
+                key={d.subitem_code}
+                className="border-t border-slate-100 hover:bg-slate-50"
+              >
+                {idx === 0 && (
+                  <td
+                    rowSpan={g.rows.length}
+                    className="align-top border-r border-slate-100 px-3 py-2 text-slate-700"
+                  >
+                    <div className="font-medium">{g.name}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-400">
+                      {g.score} / {g.maxScore}
+                    </div>
+                    {g.overrideNote && (
+                      <div className="mt-1.5 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                        ⚠ {g.overrideNote}
+                      </div>
+                    )}
+                  </td>
+                )}
+                <td className="px-3 py-2 text-slate-900">{d.subitem_name}</td>
+                <td className="px-3 py-2 text-right font-medium">
+                  {d.score} <span className="text-slate-400">/ {d.max_score}</span>
+                </td>
+                <td className="px-3 py-2 text-slate-500">
+                  {g.overrideNote ? (
+                    <span className="text-slate-300">—</span>
+                  ) : d.is_default_score ? (
+                    <span className="text-amber-600">(默认分)</span>
+                  ) : (
+                    d.hit_rule_description || "—"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 
 export default function CreditCompanyDetailPage() {
   const params = useParams();
