@@ -21,7 +21,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 文档 | 内容 | 何时必读 |
 |---|---|---|
-| `docs/MVP业务流程共识_v1.2.md` | 整体业务范围、5 条主流程、角色定义、AI 占位约定 | 涉及业务逻辑时 |
+| `docs/MVP业务流程共识_v1.4.md` | 整体业务范围、4 角色、5 条主流程、权限点全集、AI 占位约定 | 涉及业务逻辑时 |
 | `docs/RBAC与组织架构设计讨论_v1.2.md` | RBAC 设计、组织模型、权限矩阵、已闭环决策汇总 | 涉及权限/角色/组织时 |
 | `/Users/liujingjing/Documents/overseas-platform/overseas-supply-platform` | 参考工程代码,前端视觉与功能复用来源 | 前端开发时 |
 | `docs/prompts/prompt-01-*.md` | 具体某一轮的实施任务书 | 该轮实施时 |
@@ -129,7 +129,7 @@ overseas-supply-platform/
 │   └── README.md
 │
 ├── docs/                       # 设计文档(必读)
-│   ├── MVP业务流程共识_v1.2.md
+│   ├── MVP业务流程共识_v1.4.md
 │   ├── RBAC与组织架构设计讨论_v1.2.md
 │   ├── overseas-supply-platform.md
 │   └── prompts/                # 各轮实施 prompt
@@ -521,7 +521,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 | Q27 | 何时切换 PostgreSQL | ✅ **已切**(2026-05-18,brew @16 端口 5433) |
 | Q28 | 是否容器化部署 | ✅ **已切**(2026-05-20,Docker compose + GitHub Actions 手动触发部署,详见「部署架构」) |
 
-完整待定点列表见 `docs/RBAC与组织架构设计讨论_v1.2.md` 和 `docs/MVP业务流程共识_v1.2.md`。
+完整待定点列表见 `docs/RBAC与组织架构设计讨论_v1.2.md` 和 `docs/MVP业务流程共识_v1.4.md`。
 
 ---
 

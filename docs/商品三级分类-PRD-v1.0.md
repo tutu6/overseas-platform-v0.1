@@ -12,7 +12,7 @@
 
 ### 1.1 背景
 
-- MVP 业务流程共识(`docs/MVP业务流程共识_v1.2.md`)要求:供应商入驻 Step 2 选择"主营品类(三级分类)";商城需按品类导航;采购清单/询价按品类聚合。
+- MVP 业务流程共识(`docs/MVP业务流程共识_v1.4.md`)要求:供应商入驻 Step 2 选择"主营品类(三级分类)";商城需按品类导航;采购清单/询价按品类聚合。
 - 当前项目**零分类代码**。Excel 源文件已就位:`data/三局产品三级分类(整合合同分类)20260516.xlsx`(中建三局口径,已整合合同分类)。
 - 参考工程 `/Users/liujingjing/Documents/overseas-pro/overseas-supply-platform/`(TS + Prisma)已有完整实现,可作为设计参照,**但不能直接复用代码**(技术栈不同)。
 
@@ -483,7 +483,7 @@ gantt
 
 ## 12. 参考文档
 
-- `docs/MVP业务流程共识_v1.2.md` —— 业务流程出处
+- `docs/MVP业务流程共识_v1.4.md` —— 业务流程出处
 - `docs/claude_code_full_dev_prompt.md` —— 早期开发指引,商城/分类章节
 - `CLAUDE.md` —— 项目级强约束(技术栈、命名、红线)
 - `/Users/liujingjing/Documents/overseas-pro/overseas-supply-platform/` —— 参考工程

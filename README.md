@@ -80,7 +80,7 @@ overseas-platform-v0.1/
 ├── backend/              FastAPI 后端(详见 backend/README.md)
 ├── frontend/             Next.js 前端(详见 frontend/README.md)
 ├── docs/                 设计文档
-│   ├── MVP业务流程共识_v1.2.md
+│   ├── MVP业务流程共识_v1.4.md
 │   └── RBAC与组织架构设计讨论_v1.2.md
 ├── RBAC与组织架构设计_v0.1.md   本轮实施 prompt
 ├── CLAUDE.md             给 Claude Code 的项目级指令
@@ -91,7 +91,7 @@ overseas-platform-v0.1/
 
 每次开发前必读(顺序):
 
-1. `docs/MVP业务流程共识_v1.2.md` —— 整体业务范围、5 条主流程、AI 占位约定
+1. `docs/MVP业务流程共识_v1.4.md` —— 整体业务范围、5 条主流程、AI 占位约定、权限点全集
 2. `docs/RBAC与组织架构设计讨论_v1.2.md` —— RBAC 设计、组织模型、已闭环决策汇总
 3. `RBAC与组织架构设计_v0.1.md` —— 本轮实施 prompt(细到接口契约)
 
