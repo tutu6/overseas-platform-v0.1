@@ -17,6 +17,7 @@ class BasicData(BaseModel):
     """工商基础数据(供维度1 用)。"""
     model_config = ConfigDict(from_attributes=True)
 
+    id: int | None = None  # ORM 行 id;source=missing 时为 None
     company_id: int
     established_date: date | None = None
     registered_capital: str | None = None
@@ -39,6 +40,7 @@ class FinanceData(BaseModel):
     """财务数据(供维度3 用)。"""
     model_config = ConfigDict(from_attributes=True)
 
+    id: int | None = None
     company_id: int
     revenue_trend: str | None = None       # growing / fluctuating / loss / unknown
     debt_ratio: Decimal | None = None
@@ -56,6 +58,7 @@ class LegalData(BaseModel):
     """司法舆情数据(供维度4 用)。"""
     model_config = ConfigDict(from_attributes=True)
 
+    id: int | None = None
     company_id: int
     litigation_count: int = 0
     defaulter_unresolved_count: int = 0
