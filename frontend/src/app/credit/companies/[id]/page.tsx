@@ -14,6 +14,17 @@ import { useAuthStore } from "@/stores/authStore";
 import { creditApi, type CompanyDetailOut } from "@/lib/api/credit";
 
 
+/** 维度级 override 触发后,在该维度子项行末追加的小灰字标注。
+ * key = score_dimension_override.code(后端返回 dimension_overrides[].override_rule_code)。
+ * 不在表里的 code → 不显示标注,console.warn 一次,降级。
+ */
+const OVERRIDE_ROW_LABELS: Record<string, string> = {
+  DIM2_CERT_FORGED_OR_EXPIRED: "关键证书伪造或过期,维度强制清零",
+  DIM3_UNKNOWN: "数据未知,维度按 40% 满分计",
+  DIM4_UNRESOLVED_DEFAULTER: "失信未结案,维度一票否决",
+};
+
+
 function DetailInner({ companyId }: { companyId: number }) {
   const [data, setData] = useState<CompanyDetailOut | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +79,16 @@ function DetailInner({ companyId }: { companyId: number }) {
   }
 
   const snap = data.snapshot;
+  // 维度 → override 行末文案(命中维度才有,其余维度无标注)
+  const overrideLabelByDim = new Map<string, string>();
+  for (const hit of snap?.dimension_overrides ?? []) {
+    const label = OVERRIDE_ROW_LABELS[hit.override_rule_code];
+    if (label) {
+      overrideLabelByDim.set(hit.dimension_code, label);
+    } else {
+      console.warn(`Unknown override code: ${hit.override_rule_code}`);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -186,7 +207,7 @@ function DetailInner({ companyId }: { companyId: number }) {
           12 个子项明细
         </summary>
         <div className="mt-3 overflow-x-auto">
-          <SubitemTable data={data} />
+          <SubitemTable data={data} overrideLabelByDim={overrideLabelByDim} />
         </div>
       </details>
 
@@ -220,8 +241,14 @@ function InfoRow({
   );
 }
 
-/** 12 子项明细表:维度列按维度跨行合并,每个维度只显示一次(带维度合计分)。 */
-function SubitemTable({ data }: { data: CompanyDetailOut }) {
+/** 12 子项明细表:维度列按维度跨行合并;触发维度级 override 的 3 行在"命中规则"列追加一行小灰字。 */
+function SubitemTable({
+  data,
+  overrideLabelByDim,
+}: {
+  data: CompanyDetailOut;
+  overrideLabelByDim?: Map<string, string>;
+}) {
   // 按 dimension_code 分组,保持后端返回顺序(dim 1-4)
   const groups: Array<{
     code: string;
@@ -285,6 +312,11 @@ function SubitemTable({ data }: { data: CompanyDetailOut }) {
                     <span className="text-amber-600">(默认分)</span>
                   ) : (
                     d.hit_rule_description || "—"
+                  )}
+                  {overrideLabelByDim?.get(d.dimension_code) && (
+                    <div className="mt-0.5 text-[11px] text-slate-500">
+                      {overrideLabelByDim.get(d.dimension_code)}
+                    </div>
                   )}
                 </td>
               </tr>
