@@ -22,9 +22,19 @@ def test_get_scope_operator_supplier_is_all():
 
 
 def test_get_scope_admin_business_is_none():
-    """ADMIN 对业务资源全部 NONE(Q25)。"""
-    for r in ["supplier", "product", "project", "rfq", "order", "risk"]:
+    """ADMIN 对业务资源全部 NONE(Q25 + RBAC 规范 §4.3 / §8.6)。"""
+    for r in ["supplier", "product", "project", "rfq", "order", "risk", "credit"]:
         assert get_scope(["ADMIN"], r) == Scope.NONE
+
+
+def test_get_scope_supplier_credit_is_own():
+    """SUPPLIER 信用评估:scope=OWN(PRD v0.1 §8.1 隔离规则)。"""
+    assert get_scope(["SUPPLIER"], "credit") == Scope.OWN
+
+
+def test_get_scope_buyer_operator_credit_is_all():
+    assert get_scope(["BUYER"], "credit") == Scope.ALL
+    assert get_scope(["OPERATOR"], "credit") == Scope.ALL
 
 
 def test_get_scope_admin_system_is_all():
@@ -145,9 +155,10 @@ async def test_debug_matrix_returns_full_mapping(client):
         headers={"Authorization": f"Bearer {token}"},
     )
     d = r.json()["data"]
-    # 15 资源 × 4 角色
+    # 16 资源 × 4 角色
     assert set(d["resources"].keys()) == {
-        "supplier", "product", "country", "project", "purchase_list", "cart",
+        "supplier", "product", "country", "credit",
+        "project", "purchase_list", "cart",
         "rfq", "quote", "order", "membership", "risk",
         "user", "role", "permission", "system",
     }
@@ -156,3 +167,8 @@ async def test_debug_matrix_returns_full_mapping(client):
     assert d["role_resource_scope"]["BUYER"]["project"] == "ORG"
     assert d["role_resource_scope"]["ADMIN"]["user"] == "ALL"
     assert d["role_resource_scope"]["ADMIN"]["project"] == "NONE"
+    # 信用评估 scope:SUPPLIER=OWN、ADMIN=NONE、BUYER/OPERATOR=ALL(本工单)
+    assert d["role_resource_scope"]["SUPPLIER"]["credit"] == "OWN"
+    assert d["role_resource_scope"]["ADMIN"]["credit"] == "NONE"
+    assert d["role_resource_scope"]["BUYER"]["credit"] == "ALL"
+    assert d["role_resource_scope"]["OPERATOR"]["credit"] == "ALL"
