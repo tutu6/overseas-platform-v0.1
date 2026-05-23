@@ -3,10 +3,12 @@ import { Shield, ShieldAlert, ShieldX } from "lucide-react";
 
 import type { CertificationOut } from "@/lib/api/credit";
 
-const TYPE_META: Record<CertificationOut["cert_type"], { label: string; color: string }> = {
-  mandatory_country: { label: "目标国强制", color: "#003366" },
-  system_general: { label: "通用体系", color: "#0F4C81" },
-  industry_specific: { label: "行业专项", color: "#FF6B35" },
+// PRD §8.2 只规定证书 status 的颜色(有效绿/过期灰/可疑红);
+// 证书类型分组标题统一用中性色,不额外上色避免视觉干扰
+const TYPE_META: Record<CertificationOut["cert_type"], { label: string }> = {
+  mandatory_country: { label: "目标国强制" },
+  system_general: { label: "通用体系" },
+  industry_specific: { label: "行业专项" },
 };
 
 function _statusVisual(status: CertificationOut["status"], expiresAt: string | null) {
@@ -64,10 +66,7 @@ export function CertificationChips({
         .filter((t) => grouped[t])
         .map((t) => (
           <div key={t}>
-            <div
-              className="mb-1.5 text-xs font-medium tracking-wide uppercase"
-              style={{ color: TYPE_META[t].color }}
-            >
+            <div className="mb-1.5 text-xs font-medium tracking-wide text-slate-600">
               {TYPE_META[t].label}
             </div>
             <div className="flex flex-wrap gap-2">
