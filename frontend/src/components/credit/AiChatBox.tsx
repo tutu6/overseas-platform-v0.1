@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Bot, Send, Sparkles } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUp, Bot, Sparkles } from "lucide-react";
 
 import { creditApi, streamAiMessage, type AiMessage } from "@/lib/api/credit";
 
@@ -157,33 +157,95 @@ export function AiChatBox({
         )}
       </div>
 
-      {/* 输入区 */}
-      <div className="flex items-center gap-2 border-t border-slate-100 px-3 py-2.5">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+      {/* 输入区 — Claude Code 风格:多行 textarea 自动撑高 + 圆角线框 + 右下 send */}
+      <ChatInput
+        disabled={!conversationId}
+        streaming={streaming}
+        value={input}
+        onChange={setInput}
+        onSend={handleSend}
+      />
+    </div>
+  );
+}
+
+
+/** Claude Code 风格输入框:多行 textarea 自动撑高(2-8 行)+ 右下角 send。 */
+function ChatInput({
+  disabled,
+  streaming,
+  value,
+  onChange,
+  onSend,
+}: {
+  disabled: boolean;
+  streaming: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 内容变化时自动撑高(2-8 行之间)
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 8 * 24); // 单行约 24px,封顶 8 行
+    el.style.height = `${next}px`;
+  }, [value]);
+
+  const canSend = !disabled && !streaming && !!value.trim();
+
+  return (
+    <div className="border-t border-slate-100 px-3 py-3">
+      <div
+        className={
+          "relative flex items-end gap-2 rounded-xl border bg-white transition-colors " +
+          (canSend
+            ? "border-slate-300 focus-within:border-[#003366]"
+            : "border-slate-200 focus-within:border-slate-400")
+        }
+      >
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              handleSend();
+              if (canSend) onSend();
             }
           }}
-          disabled={!conversationId || streaming}
+          disabled={disabled || streaming}
           placeholder={
-            conversationId
-              ? "针对该企业追问任何问题…"
-              : "正在准备会话…"
+            disabled
+              ? "正在准备会话…"
+              : streaming
+                ? "AI 正在回复…"
+                : "针对该企业追问任何问题…"
           }
-          className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-[#003366] focus:outline-none disabled:bg-slate-50"
+          rows={2}
+          className="flex-1 resize-none bg-transparent px-3.5 py-2.5 text-sm leading-6 text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:text-slate-400"
         />
         <button
-          onClick={handleSend}
-          disabled={!conversationId || streaming || !input.trim()}
-          className="rounded-md bg-[#003366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#002244] disabled:bg-slate-300"
+          type="button"
+          onClick={onSend}
+          disabled={!canSend}
+          title="发送(Enter)"
+          aria-label="发送"
+          className={
+            "mb-2 mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors " +
+            (canSend
+              ? "bg-[#003366] text-white hover:bg-[#002244]"
+              : "bg-slate-100 text-slate-400")
+          }
         >
-          <Send className="h-4 w-4" />
+          <ArrowUp className="h-4 w-4" />
         </button>
+      </div>
+      <div className="mt-1.5 px-1 text-[10px] text-slate-400">
+        Enter 发送 · Shift + Enter 换行
       </div>
     </div>
   );
