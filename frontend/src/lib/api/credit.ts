@@ -36,10 +36,24 @@ export interface ScoreDetailOut {
   is_default_score: boolean;
 }
 
+export interface DimensionOverrideHit {
+  dimension_code: string;
+  override_rule_code: string;
+  override_description: string;
+  natural_score: number;
+  final_score: number;
+}
+
 export interface SnapshotOut {
   id: number;
   total_score: number;
   grade: Grade;
+  /** v0.2:同时返回自然分(未 override)和最终分;历史 v0.1 快照这 5 字段为 null = 无 override */
+  dimension_1_natural_score: number | null;
+  dimension_2_natural_score: number | null;
+  dimension_3_natural_score: number | null;
+  dimension_4_natural_score: number | null;
+  dimension_overrides: DimensionOverrideHit[] | null;
   rule_version: number;
   trigger_type: string;
   ai_summary: string | null;

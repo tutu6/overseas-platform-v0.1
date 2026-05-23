@@ -93,12 +93,28 @@ class DimensionOut(BaseModel):
     score: int
 
 
+class DimensionOverrideHitOut(BaseModel):
+    """命中的维度级 override 明细(v0.2)。"""
+    dimension_code: str
+    override_rule_code: str
+    override_description: str
+    natural_score: int
+    final_score: int
+
+
 class SnapshotOut(BaseModel):
     """评分快照。"""
     model_config = ConfigDict(from_attributes=True)
     id: int
     total_score: int
     grade: str
+    # v0.2:同时返回自然分(未 override)和最终分(各维度 dimension_N_score)
+    # 历史 v0.1 快照这 5 字段为 NULL,前端等价 '无 override'
+    dimension_1_natural_score: int | None = None
+    dimension_2_natural_score: int | None = None
+    dimension_3_natural_score: int | None = None
+    dimension_4_natural_score: int | None = None
+    dimension_overrides: list[DimensionOverrideHitOut] | None = None
     rule_version: int
     trigger_type: str
     ai_summary: str | None = None

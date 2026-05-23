@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Globe, Calendar, Banknote, Building2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Globe, Calendar, Banknote, Building2, RefreshCw, AlertTriangle } from "lucide-react";
 
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { RouteGuard } from "@/components/auth/RouteGuard";
@@ -68,6 +68,9 @@ function DetailInner({ companyId }: { companyId: number }) {
   }
 
   const snap = data.snapshot;
+  // v0.2:命中维度级 override 的 dimension_code 集合(给雷达图、override 卡片、12 子项表共用)
+  const overrideHits = snap?.dimension_overrides ?? [];
+  const overriddenDimCodes = new Set(overrideHits.map((h) => h.dimension_code));
 
   return (
     <div className="space-y-5">
@@ -122,7 +125,11 @@ function DetailInner({ companyId }: { companyId: number }) {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">四维评分</h3>
           {snap ? (
-            <CreditRadarChart dimensions={data.dimensions} totalScore={snap.total_score} />
+            <CreditRadarChart
+              dimensions={data.dimensions}
+              totalScore={snap.total_score}
+              overriddenDimCodes={overriddenDimCodes}
+            />
           ) : (
             <div className="py-12 text-center text-sm text-slate-400">暂无评分</div>
           )}
@@ -177,13 +184,18 @@ function DetailInner({ companyId }: { companyId: number }) {
         <CertificationChips certifications={data.certifications} />
       </div>
 
+      {/* v0.2:维度级 override 命中提示(仅在 dimension_overrides 非空时显示)*/}
+      {overrideHits.length > 0 && (
+        <OverrideNotice hits={overrideHits} dimensions={data.dimensions} />
+      )}
+
       {/* 12 子项明细 */}
       <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <summary className="cursor-pointer text-sm font-semibold text-slate-900">
           12 个子项明细
         </summary>
         <div className="mt-3 overflow-x-auto">
-          <SubitemTable data={data} />
+          <SubitemTable data={data} overriddenDimCodes={overriddenDimCodes} />
         </div>
       </details>
 
@@ -217,8 +229,14 @@ function InfoRow({
   );
 }
 
-/** 12 子项明细表:维度列按维度跨行合并,每个维度只显示一次(带维度合计分)。 */
-function SubitemTable({ data }: { data: CompanyDetailOut }) {
+/** 12 子项明细表:维度列按维度跨行合并;被维度级 override 命中的 3 行末尾标"(被维度规则覆盖)"。 */
+function SubitemTable({
+  data,
+  overriddenDimCodes,
+}: {
+  data: CompanyDetailOut;
+  overriddenDimCodes?: Set<string>;
+}) {
   // 按 dimension_code 分组,保持后端返回顺序(dim 1-4)
   const groups: Array<{
     code: string;
@@ -226,6 +244,7 @@ function SubitemTable({ data }: { data: CompanyDetailOut }) {
     rows: typeof data.details;
     score: number;
     maxScore: number;
+    overridden: boolean;
   }> = [];
 
   for (const d of data.details) {
@@ -238,6 +257,7 @@ function SubitemTable({ data }: { data: CompanyDetailOut }) {
         rows: [],
         score: dim?.score ?? 0,
         maxScore: dim?.max_score ?? 0,
+        overridden: overriddenDimCodes?.has(d.dimension_code) ?? false,
       };
       groups.push(g);
     }
@@ -267,7 +287,12 @@ function SubitemTable({ data }: { data: CompanyDetailOut }) {
                     rowSpan={g.rows.length}
                     className="align-top border-r border-slate-100 px-3 py-2 text-slate-700"
                   >
-                    <div className="font-medium">{g.name}</div>
+                    <div className="flex items-center gap-1 font-medium">
+                      {g.overridden && (
+                        <AlertTriangle className="h-3 w-3 text-amber-600" />
+                      )}
+                      {g.name}
+                    </div>
                     <div className="mt-0.5 text-[11px] text-slate-400">
                       {g.score} / {g.maxScore}
                     </div>
@@ -281,7 +306,14 @@ function SubitemTable({ data }: { data: CompanyDetailOut }) {
                   {d.is_default_score ? (
                     <span className="text-amber-600">(默认分)</span>
                   ) : (
-                    d.hit_rule_description || "—"
+                    <>
+                      {d.hit_rule_description || "—"}
+                      {g.overridden && (
+                        <span className="ml-1.5 text-[10px] text-amber-600">
+                          (被维度规则覆盖)
+                        </span>
+                      )}
+                    </>
                   )}
                 </td>
               </tr>
@@ -290,6 +322,41 @@ function SubitemTable({ data }: { data: CompanyDetailOut }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+
+/** v0.2:维度级 override 命中提示卡片。在雷达图与 12 子项明细之间。 */
+function OverrideNotice({
+  hits,
+  dimensions,
+}: {
+  hits: NonNullable<CompanyDetailOut["snapshot"]>["dimension_overrides"] extends infer T
+    ? T extends Array<infer U> ? U[] : never : never;
+  dimensions: CompanyDetailOut["dimensions"];
+}) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-800">
+        <AlertTriangle className="h-4 w-4" />
+        该评分包含 {hits.length} 项强制规则触发
+      </div>
+      <ul className="space-y-1.5 text-xs text-amber-900">
+        {hits.map((h) => {
+          const dim = dimensions.find((d) => d.code === h.dimension_code);
+          const dimName = dim?.name ?? h.dimension_code;
+          return (
+            <li key={h.override_rule_code} className="leading-relaxed">
+              <span className="font-medium">{dimName}</span>
+              <span className="text-amber-700"> · {h.override_description}</span>
+              <div className="ml-3 mt-0.5 font-mono text-[11px] text-amber-700">
+                自然评分 {h.natural_score} → 最终评分 {h.final_score}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
