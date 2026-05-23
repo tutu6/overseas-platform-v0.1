@@ -33,12 +33,16 @@ from app.db.models import (
     RevenueTrend,
     CashFlowStatus,
     ScoreDimension,
+    ScoreDimensionOverride,
     ScoreRule,
     ScoreSubitem,
     TriggerType,
 )
 from app.services.credit.data_source.mock_data_source import MockDataSource
-from app.services.credit.evaluators import EVALUATORS
+from app.services.credit.evaluators import (
+    DIMENSION_OVERRIDE_EVALUATORS,
+    SUBITEM_EVALUATORS,
+)
 from app.services.credit.scoring_engine import ScoringEngine
 
 logger = logging.getLogger(__name__)
@@ -102,64 +106,86 @@ _RULES: list[tuple[str, str, str, int, str, int]] = [
     ("BASIC_SHAREHOLDERS", "R_BASIC_SH_MISSING", "无法查证", 0, "basic_shareholders_missing", 30),
 
     # =========================================================================
-    # 维度2(每子项加 priority=0 override:关键证书伪造/过期 → 该子项 0)
+    # 维度2(v0.2:维度级 override 已移到 score_dimension_override 表,见 _DIMENSION_OVERRIDES)
     # =========================================================================
-    ("CERT_MANDATORY", "R_CERT_CRITICAL_MANDATORY", "关键证书伪造/过期 → 维度清零", 0, "cert_critical_problem", 0),
     ("CERT_MANDATORY", "R_CERT_MANDATORY_VALID", "目标国强制认证且有效期内", 10, "cert_mandatory_valid", 10),
     ("CERT_MANDATORY", "R_CERT_MANDATORY_EXPIRED", "目标国强制认证已过期", 3, "cert_mandatory_expired", 20),
     ("CERT_MANDATORY", "R_CERT_MANDATORY_MISSING", "无目标国强制认证", 0, "cert_mandatory_missing", 30),
 
-    ("CERT_SYSTEM_GENERAL", "R_CERT_CRITICAL_SYSTEM", "关键证书伪造/过期 → 维度清零", 0, "cert_critical_problem", 0),
     ("CERT_SYSTEM_GENERAL", "R_CERT_SYSTEM_2_OR_MORE", "通用体系认证 ≥2 项", 8, "cert_system_count_2_or_more", 10),
     ("CERT_SYSTEM_GENERAL", "R_CERT_SYSTEM_1", "通用体系认证 1 项", 4, "cert_system_count_1", 20),
     ("CERT_SYSTEM_GENERAL", "R_CERT_SYSTEM_0", "无通用体系认证", 0, "cert_system_count_0", 30),
 
-    ("CERT_INDUSTRY_SPECIFIC", "R_CERT_CRITICAL_INDUSTRY", "关键证书伪造/过期 → 维度清零", 0, "cert_critical_problem", 0),
     ("CERT_INDUSTRY_SPECIFIC", "R_CERT_INDUSTRY_3_OR_MORE", "行业专项认证 ≥3 项(cap 7)", 7, "cert_industry_count_3_or_more", 10),
     ("CERT_INDUSTRY_SPECIFIC", "R_CERT_INDUSTRY_2", "行业专项认证 2 项", 6, "cert_industry_count_2", 20),
     ("CERT_INDUSTRY_SPECIFIC", "R_CERT_INDUSTRY_1", "行业专项认证 1 项", 3, "cert_industry_count_1", 30),
     ("CERT_INDUSTRY_SPECIFIC", "R_CERT_INDUSTRY_0", "无行业专项认证", 0, "cert_industry_count_0", 40),
 
     # =========================================================================
-    # 维度3(每子项加 priority=0 override:整维度 missing → 4 分)
+    # 维度3(v0.2:整维度数据缺失走维度级 override,见 _DIMENSION_OVERRIDES)
     # =========================================================================
-    ("FINANCE_REVENUE", "R_FIN_REV_MISSING", "财务数据整维度缺失", 4, "finance_dimension_missing", 0),
     ("FINANCE_REVENUE", "R_FIN_REV_GROWING", "近 2 年营收稳定或增长", 10, "finance_revenue_growing", 10),
     ("FINANCE_REVENUE", "R_FIN_REV_FLUCTUATING", "波动但盈利", 7, "finance_revenue_fluctuating", 20),
     ("FINANCE_REVENUE", "R_FIN_REV_LOSS", "亏损", 3, "finance_revenue_loss", 30),
     ("FINANCE_REVENUE", "R_FIN_REV_UNKNOWN", "数据不可查", 5, "finance_revenue_unknown", 40),
 
-    ("FINANCE_DEBT", "R_FIN_DEBT_MISSING", "财务数据整维度缺失", 4, "finance_dimension_missing", 0),
     ("FINANCE_DEBT", "R_FIN_DEBT_LOW", "资产负债率 < 70%", 10, "finance_debt_low", 10),
     ("FINANCE_DEBT", "R_FIN_DEBT_MEDIUM", "资产负债率 70-85%", 6, "finance_debt_medium", 20),
     ("FINANCE_DEBT", "R_FIN_DEBT_HIGH", "资产负债率 > 85%", 2, "finance_debt_high", 30),
     ("FINANCE_DEBT", "R_FIN_DEBT_UNKNOWN", "数据不可查", 5, "finance_debt_unknown", 40),
 
-    ("FINANCE_CASHFLOW", "R_FIN_CASH_MISSING", "财务数据整维度缺失", 4, "finance_dimension_missing", 0),
     ("FINANCE_CASHFLOW", "R_FIN_CASH_POSITIVE", "经营性现金流为正", 10, "finance_cashflow_positive", 10),
     ("FINANCE_CASHFLOW", "R_FIN_CASH_NEG_FUND", "为负但融资正常", 6, "finance_cashflow_negative_with_funding", 20),
     ("FINANCE_CASHFLOW", "R_FIN_CASH_PERSIST_NEG", "持续为负", 2, "finance_cashflow_persistent_negative", 30),
     ("FINANCE_CASHFLOW", "R_FIN_CASH_UNKNOWN", "数据不可查", 5, "finance_cashflow_unknown", 40),
 
     # =========================================================================
-    # 维度4(每子项加 priority=0 一票否决:失信未结案 → 维度全 0)
+    # 维度4(v0.2:失信未结案一票否决走维度级 override,见 _DIMENSION_OVERRIDES)
     # =========================================================================
-    ("LEGAL_LITIGATION", "R_LEG_VETO_LITIGATION", "失信被执行未结案 → 一票否决", 0, "legal_dimension_veto", 0),
     ("LEGAL_LITIGATION", "R_LEG_LITI_ZERO", "无诉讼记录", 10, "legal_litigation_zero", 10),
     ("LEGAL_LITIGATION", "R_LEG_LITI_LOW", "诉讼 < 5 起", 7, "legal_litigation_low", 20),
     ("LEGAL_LITIGATION", "R_LEG_LITI_MEDIUM", "诉讼 5-20 起", 4, "legal_litigation_medium", 30),
     ("LEGAL_LITIGATION", "R_LEG_LITI_HIGH", "诉讼 > 20 起", 1, "legal_litigation_high", 40),
 
-    ("LEGAL_DEFAULTER", "R_LEG_VETO_DEFAULTER", "失信被执行未结案 → 一票否决", 0, "legal_dimension_veto", 0),
     ("LEGAL_DEFAULTER", "R_LEG_DEF_NONE", "无失信记录", 10, "legal_defaulter_none", 10),
     ("LEGAL_DEFAULTER", "R_LEG_DEF_RESOLVED", "有失信记录但已结案", 4, "legal_defaulter_resolved_only", 20),
     ("LEGAL_DEFAULTER", "R_LEG_DEF_UNRESOLVED", "有未结案失信记录", 0, "legal_defaulter_unresolved", 30),
 
-    ("LEGAL_NEWS", "R_LEG_VETO_NEWS", "失信被执行未结案 → 一票否决", 0, "legal_dimension_veto", 0),
     ("LEGAL_NEWS", "R_LEG_NEWS_NONE", "无负面报道", 10, "legal_news_none", 10),
     ("LEGAL_NEWS", "R_LEG_NEWS_OCCASIONAL", "偶发已澄清", 6, "legal_news_occasional", 20),
     ("LEGAL_NEWS", "R_LEG_NEWS_PERSISTENT", "持续负面", 2, "legal_news_persistent", 30),
     ("LEGAL_NEWS", "R_LEG_NEWS_MAJOR", "重大丑闻", 0, "legal_news_major_scandal", 40),
+]
+
+
+# v0.2 维度级 override 配置(对齐 score_dimension_override 表)。
+# 一个 dim 可以挂多条,按 priority 升序求值,首条命中即停。
+# (dim_code, override_code, description, override_score, evaluator_key, priority)
+_DIMENSION_OVERRIDES: list[tuple[str, str, str, int, str, int]] = [
+    (
+        DimensionCode.CERTIFICATION,
+        "DIM2_CERT_FORGED_OR_EXPIRED",
+        "关键证书伪造或过期未更新,维度强制清零",
+        0,
+        "dim2_cert_forged_or_expired",
+        0,
+    ),
+    (
+        DimensionCode.FINANCE,
+        "DIM3_UNKNOWN",
+        "财务数据完全缺失,维度给满分 40%(12 分)",
+        12,
+        "dim3_unknown",
+        0,
+    ),
+    (
+        DimensionCode.LEGAL,
+        "DIM4_UNRESOLVED_DEFAULTER",
+        "失信被执行未结案,维度直接判 0(一票否决)",
+        0,
+        "dim4_unresolved_defaulter",
+        0,
+    ),
 ]
 
 
@@ -383,13 +409,13 @@ async def seed_credit_score_model(db: AsyncSession) -> None:
         else:
             code_to_sub[sub_code] = existing
 
-    # ---- rules ----
+    # ---- rules(子项级)----
     orphan_evaluator_keys: list[str] = []
     for sub_code, rule_code, desc, score, ev_key, priority in _RULES:
         row = await db.execute(select(ScoreRule).where(ScoreRule.code == rule_code))
         if row.scalar_one_or_none() is not None:
             continue
-        if ev_key not in EVALUATORS:
+        if ev_key not in SUBITEM_EVALUATORS:
             orphan_evaluator_keys.append(f"{rule_code} → {ev_key}")
         db.add(
             ScoreRule(
@@ -402,12 +428,67 @@ async def seed_credit_score_model(db: AsyncSession) -> None:
     await db.commit()
     if orphan_evaluator_keys:
         logger.warning(
-            "Credit seed: 发现 %d 条 rule 的 evaluator_key 在 EVALUATORS 中找不到: %s",
+            "Credit seed: 发现 %d 条 rule 的 evaluator_key 在 SUBITEM_EVALUATORS 中找不到: %s",
             len(orphan_evaluator_keys), orphan_evaluator_keys,
         )
     logger.info(
-        "Credit seed: 评分模型骨架完成 (4 维度 / 12 子项 / 51 规则)"
+        "Credit seed: 评分模型骨架完成 (4 维度 / 12 子项 / %d 子项级规则)",
+        len(_RULES),
     )
+
+
+async def seed_credit_dimension_overrides(db: AsyncSession) -> None:
+    """种入维度级 override(v0.2 重构,从 score_rule 表剥离)。
+
+    幂等:按 code 检查是否已存在。
+    启动校验:每条 override 的 evaluator_key 必须在 DIMENSION_OVERRIDE_EVALUATORS,否则 WARN。
+    """
+    # 拿维度对应表
+    dim_rows = await db.execute(select(ScoreDimension))
+    dim_by_code = {d.code: d for d in dim_rows.scalars().all()}
+
+    orphan: list[str] = []
+    inserted = 0
+    for dim_code, ov_code, desc, score, ev_key, priority in _DIMENSION_OVERRIDES:
+        existing = await db.execute(
+            select(ScoreDimensionOverride).where(
+                ScoreDimensionOverride.code == ov_code
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            continue
+        dim = dim_by_code.get(dim_code)
+        if dim is None:
+            logger.error(
+                "Credit seed: override %s 引用的 dimension %s 不存在,跳过",
+                ov_code, dim_code,
+            )
+            continue
+        if ev_key not in DIMENSION_OVERRIDE_EVALUATORS:
+            orphan.append(f"{ov_code} → {ev_key}")
+        db.add(
+            ScoreDimensionOverride(
+                dimension_id=dim.id,
+                code=ov_code,
+                description=desc,
+                override_score=score,
+                evaluator_key=ev_key,
+                priority=priority,
+                is_active=True,
+                version=1,
+            )
+        )
+        inserted += 1
+    await db.commit()
+    if orphan:
+        logger.warning(
+            "Credit seed: 发现 %d 条 override 的 evaluator_key 在 DIMENSION_OVERRIDE_EVALUATORS 中找不到: %s",
+            len(orphan), orphan,
+        )
+    if inserted:
+        logger.info(
+            "Credit seed: 维度级 override 配置完成 (%d 条新增)", inserted
+        )
 
 
 async def seed_credit_demo_companies(db: AsyncSession) -> None:
@@ -533,5 +614,8 @@ async def seed_credit_demo_companies(db: AsyncSession) -> None:
 async def seed_credit_module(db: AsyncSession) -> None:
     """信用评估模块种子入口。"""
     await seed_credit_score_model(db)
+    await seed_credit_dimension_overrides(db)
     await seed_credit_demo_companies(db)
-    logger.info("Credit seed: 评分模型骨架 + 4 家 demo 企业 seed 完成")
+    logger.info(
+        "Credit seed: 评分模型骨架 + 维度级 override + 4 家 demo 企业 seed 完成"
+    )
