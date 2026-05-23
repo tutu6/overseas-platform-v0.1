@@ -25,6 +25,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShoppingBag,
+  Star,
   ShoppingCart,
   Sparkles,
   Store,
@@ -166,6 +167,8 @@ export const WORKSPACES: Workspace[] = [
           { path: "/supplier/quotes",     label: "我的报价",   labelEn: "Quotes",      icon: Send,            resource: "quote",      requiredPermissions: [Permissions.QUOTE_READ],         description: "已提交的报价列表" },
           { path: "/supplier/orders",     label: "订单管理",   labelEn: "Orders",      icon: Receipt,         resource: "order",      requiredPermissions: [Permissions.ORDER_READ],         description: "订单列表与节点打卡" },
           { path: "/supplier/profile",    label: "企业档案",   labelEn: "Profile",     icon: UserCircle2,     resource: "supplier",   requiredPermissions: [Permissions.SUPPLIER_READ],      description: "企业资料 / 评分查看" },
+          // 信用评分:本轮占位(本期 credit_company 表无 SUPPLIER 镜像数据 → 永远显示"未评级")
+          { path: "/supplier/credit",     label: "信用评分",   labelEn: "Credit",      icon: Star,            resource: "credit",     requiredPermissions: [Permissions.CREDIT_READ],        description: "本企业的信用评分(未评级占位,功能开发中)" },
           // 成员管理:本轮占位(PRD v1.3 §5.5)。**不挂权限点**,T-MEMBER 待办时再细化
           { path: "/supplier/members",    label: "成员管理",   labelEn: "Members",     icon: Users,           resource: null,         requiredPermissions: [],                              description: "功能即将上线 · owner 可在此邀请、移除企业内员工" },
         ],
