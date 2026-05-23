@@ -119,12 +119,27 @@ class DimensionResult(BaseModel):
     subitems: list[SubitemResult]
 
 
+class DimensionOverrideHit(BaseModel):
+    """命中维度级 override 的明细(写入 score_snapshot.dimension_overrides JSONB)。"""
+    dimension_code: str
+    override_rule_code: str
+    override_description: str
+    natural_score: int
+    final_score: int
+
+
 class ScoringResult(BaseModel):
-    """ScoringEngine.compute 完整输出(用于写库前的中间产物)。"""
+    """ScoringEngine.compute 完整输出(用于写库前的中间产物)。
+
+    v0.2 重构:同时记录自然分(natural_dim_scores)和最终分(dimensions[i].score),
+    后者可能被维度级 override 覆盖。dimension_overrides 记录命中明细。
+    """
     company_id: int
-    total_score: int
+    total_score: int  # = sum(final_score per dim)
     grade: str
-    dimensions: list[DimensionResult]
+    dimensions: list[DimensionResult]  # score 字段是 final_score(可能被 override 覆盖)
+    natural_dim_scores: dict[str, int]  # dimension_code → 自然分(未 override)
+    dimension_overrides: list[DimensionOverrideHit]  # 命中的维度级 override 列表,可为空
     rule_version: int
     basic_data_id: int | None = None
     finance_data_id: int | None = None

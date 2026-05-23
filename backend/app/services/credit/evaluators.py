@@ -1,20 +1,27 @@
-"""规则求值函数集中地(信用评估 §3.3 + PRD v0.3 §4.3)。
+"""规则求值函数集中地(信用评估 §3.3 + PRD v0.3 §4.3 + v0.2 重构)。
 
 设计:
 - 函数签名统一 `def fn(data: dict) -> bool`
 - data 含 4 类数据 + today + country_code(详见 ScoringEngine.compute)
-- 末尾导出 EVALUATORS 字典,key 严格对应 score_rule.evaluator_key
+- 拆为两组(v0.2 工单):
+  · SUBITEM_EVALUATORS:子项级自然评分,key 严格对应 score_rule.evaluator_key
+  · DIMENSION_OVERRIDE_EVALUATORS:维度级强制规则,key 严格对应 score_dimension_override.evaluator_key
 
 档位语义:
 - 同 subitem 的 rule 按 priority 升序求值,首条命中即停;全部未命中走 subitem.default_score
-- "维度级一票否决"通过给该维度的每个 subitem 加 priority=0 的 override 规则实现,
-  触发后整维度归 0 / 整维度走默认分
+- 维度级 override 在 ScoringEngine 子项评分完成后单独跑(post-process),命中后该维度
+  最终分被 override.override_score 覆盖,但 score_detail 仍保留自然命中规则,可解释
 
-子项 EVALUATORS 分布(约 43 个):
+SUBITEM_EVALUATORS 分布(共约 41 个):
 - 维度1 基础工商: 9 个(reg_info × 3 + status × 3 + shareholders × 3)
-- 维度2 资质认证: 10 + 1 override(mandatory × 3 + system × 3 + industry × 4 + cert_critical_problem)
-- 维度3 财务健康: 12 + 1 override(revenue/debt/cashflow × 4 + finance_dimension_missing)
-- 维度4 司法舆情: 11 + 1 override(litigation × 4 + defaulter × 3 + news × 4 + legal_dimension_veto)
+- 维度2 资质认证: 10 个(mandatory × 3 + system × 3 + industry × 4)
+- 维度3 财务健康: 12 个(revenue/debt/cashflow × 4)
+- 维度4 司法舆情: 11 个(litigation × 4 + defaulter × 3 + news × 4)
+
+DIMENSION_OVERRIDE_EVALUATORS(共 3 个):
+- dim2_cert_forged_or_expired:目标国强制认证伪造/过期 → 维度强制清零
+- dim3_unknown:财务数据整维度缺失 → 维度给满分 40%(12 分)
+- dim4_unresolved_defaulter:失信被执行未结案 → 维度直接判 0(一票否决)
 """
 from __future__ import annotations
 
@@ -147,36 +154,8 @@ def basic_shareholders_missing(data: dict) -> bool:
 
 
 # =============================================================================
-# 维度2: 资质认证(25 分)
-#   override: 关键证书伪造/过期未更新 → 整维度清零
+# 维度2: 资质认证(25 分) — 维度级 override 见底部 DIMENSION_OVERRIDE_EVALUATORS
 # =============================================================================
-
-# ---- 维度级 override(给该维度每个 subitem 配 priority=0 的 rule)----
-
-def cert_critical_problem(data: dict) -> bool:
-    """命中 → 整维度 0:
-    - status == suspicious_forged(伪造)
-    - status == expired(过期未更新)
-    """
-    today = _today(data)
-    for c in _certs(data):
-        if c.get("status") == "suspicious_forged":
-            return True
-        if c.get("status") == "expired":
-            return True
-        # status=valid 但 expires_at 已过(实际等同 expired,但 seed 数据未更新 status)
-        if c.get("status") == "valid":
-            expires = c.get("expires_at")
-            if expires is not None:
-                if isinstance(expires, str):
-                    try:
-                        expires = date.fromisoformat(expires)
-                    except ValueError:
-                        continue
-                if expires < today:
-                    return True
-    return False
-
 
 # ---- 子项 2.1: 目标国强制认证(10 分)----
 
@@ -273,14 +252,8 @@ def cert_industry_count_0(data: dict) -> bool:
 
 
 # =============================================================================
-# 维度3: 财务健康(30 分)
-#   override: 整维度数据缺失 → 每子项给 4 分(整维度 12 = 40% 满分)
+# 维度3: 财务健康(30 分) — 维度级 override 见底部 DIMENSION_OVERRIDE_EVALUATORS
 # =============================================================================
-
-def finance_dimension_missing(data: dict) -> bool:
-    """整维度数据缺失 → priority 0 命中,每子项给 4 分(整维度 12 = 40% × 30)。"""
-    return (_finance(data).get("data_source") or "") == "missing"
-
 
 # ---- 子项 3.1: 营收与盈利(10 分)----
 
@@ -355,14 +328,8 @@ def finance_cashflow_unknown(data: dict) -> bool:
 
 
 # =============================================================================
-# 维度4: 司法舆情(30 分)
-#   override: 失信被执行未结案 → 整维度 0
+# 维度4: 司法舆情(30 分) — 维度级 override 见底部 DIMENSION_OVERRIDE_EVALUATORS
 # =============================================================================
-
-def legal_dimension_veto(data: dict) -> bool:
-    """一票否决:未结案失信记录 > 0 → 整维度 0。"""
-    return (_legal(data).get("defaulter_unresolved_count") or 0) > 0
-
 
 # ---- 子项 4.1: 法律诉讼(10 分)----
 
@@ -424,10 +391,59 @@ def legal_news_major_scandal(data: dict) -> bool:
 
 
 # =============================================================================
-# 导出字典(rule.evaluator_key 严格对应这里的 key)
+# 维度级 override(post-process,跑在子项自然评分之后)
 # =============================================================================
 
-EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
+def dim2_cert_forged_or_expired(data: dict) -> bool:
+    """维度2 强制清零:**目标国强制认证**(cert_type='mandatory_country')伪造或过期。
+
+    PRD §4.3 维度2"关键证书伪造或过期未更新 → 该维度强制清零"。
+    "关键证书"在 v0.2 工单里精确为 mandatory_country 一类(不含 system/industry)。
+
+    触发条件:
+    - status == 'suspicious_forged'
+    - status == 'expired'
+    - status == 'valid' 但 expires_at < today(数据滞后,实际已过期)
+    """
+    today = _today(data)
+    for c in _certs(data):
+        if c.get("cert_type") != "mandatory_country":
+            continue
+        status = c.get("status")
+        if status in ("suspicious_forged", "expired"):
+            return True
+        if status == "valid":
+            expires = c.get("expires_at")
+            if expires is not None:
+                if isinstance(expires, str):
+                    try:
+                        expires = date.fromisoformat(expires)
+                    except ValueError:
+                        continue
+                if expires < today:
+                    return True
+    return False
+
+
+def dim3_unknown(data: dict) -> bool:
+    """维度3 整维度数据缺失 → override_score=12(40% × 30)。
+
+    判定:finance 数据 data_source == 'missing'(MockDataSource 在表无数据时返回的 stub)。
+    """
+    fin = _finance(data)
+    return (fin.get("data_source") or "") == "missing"
+
+
+def dim4_unresolved_defaulter(data: dict) -> bool:
+    """维度4 一票否决:有未结案失信记录 → override_score=0。"""
+    return (_legal(data).get("defaulter_unresolved_count") or 0) > 0
+
+
+# =============================================================================
+# 导出字典(严格对应:score_rule.evaluator_key + score_dimension_override.evaluator_key)
+# =============================================================================
+
+SUBITEM_EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
     # 维度1
     "basic_reg_info_full": basic_reg_info_full,
     "basic_reg_info_miss_one": basic_reg_info_miss_one,
@@ -438,8 +454,7 @@ EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
     "basic_shareholders_clear": basic_shareholders_clear,
     "basic_shareholders_partial": basic_shareholders_partial,
     "basic_shareholders_missing": basic_shareholders_missing,
-    # 维度2(含 override)
-    "cert_critical_problem": cert_critical_problem,
+    # 维度2
     "cert_mandatory_valid": cert_mandatory_valid,
     "cert_mandatory_expired": cert_mandatory_expired,
     "cert_mandatory_missing": cert_mandatory_missing,
@@ -450,8 +465,7 @@ EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
     "cert_industry_count_2": cert_industry_count_2,
     "cert_industry_count_1": cert_industry_count_1,
     "cert_industry_count_0": cert_industry_count_0,
-    # 维度3(含 override)
-    "finance_dimension_missing": finance_dimension_missing,
+    # 维度3
     "finance_revenue_growing": finance_revenue_growing,
     "finance_revenue_fluctuating": finance_revenue_fluctuating,
     "finance_revenue_loss": finance_revenue_loss,
@@ -464,8 +478,7 @@ EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
     "finance_cashflow_negative_with_funding": finance_cashflow_negative_with_funding,
     "finance_cashflow_persistent_negative": finance_cashflow_persistent_negative,
     "finance_cashflow_unknown": finance_cashflow_unknown,
-    # 维度4(含 veto)
-    "legal_dimension_veto": legal_dimension_veto,
+    # 维度4
     "legal_litigation_zero": legal_litigation_zero,
     "legal_litigation_low": legal_litigation_low,
     "legal_litigation_medium": legal_litigation_medium,
@@ -478,3 +491,14 @@ EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
     "legal_news_persistent": legal_news_persistent,
     "legal_news_major_scandal": legal_news_major_scandal,
 }
+
+
+DIMENSION_OVERRIDE_EVALUATORS: dict[str, Callable[[dict[str, Any]], bool]] = {
+    "dim2_cert_forged_or_expired": dim2_cert_forged_or_expired,
+    "dim3_unknown": dim3_unknown,
+    "dim4_unresolved_defaulter": dim4_unresolved_defaulter,
+}
+
+
+# Backward-compat alias(其他模块迁移期间用,后续可删)。
+EVALUATORS = SUBITEM_EVALUATORS
