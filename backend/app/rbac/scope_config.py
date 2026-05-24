@@ -77,9 +77,9 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.OWN,
         "product":       Scope.OWN,
         "country":       Scope.ALL,
-        # 信用评估:SUPPLIER 只能看自家企业(linked_supplier_org_id = 自身 supplier_org_id)
-        # PRD v0.1 §8.1:绝对不可查看平台内其他供应商的分数
-        "credit":        Scope.OWN,
+        # 信用评估:Δ5 定位变更后 SUPPLIER 不持有 credit 权限点,scope 同步 NONE
+        # (SUPPLIER 暂不可看自家评分,API 层 require_permission 直接 403)
+        "credit":        Scope.NONE,
         "project":       Scope.NONE,
         "purchase_list": Scope.NONE,
         "cart":          Scope.NONE,

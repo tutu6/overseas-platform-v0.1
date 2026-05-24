@@ -40,7 +40,7 @@ from app.db.models import (
 )
 from app.rbac.constants import Permissions
 from app.rbac.guards import require_permission
-from app.rbac.scope_config import Scope, get_scope
+from app.db.models.supplier_organization import SupplierOrganization
 from app.db.session import get_db
 from app.schemas.credit import (
     AiConversationCreateIn,
@@ -77,31 +77,17 @@ def _llm_service() -> QwenChatService:
     return QwenChatService(settings)
 
 
-def _supplier_org_id_or_none(current: CurrentUser) -> int | None:
-    """SUPPLIER 用户取 supplier_org_id;非 SUPPLIER 或未关联 → None。"""
-    org = current.organization
-    if org is not None and org.type == "SUPPLIER_ORG":
-        return org.id
-    return None
-
-
-def _credit_read_scope(current: CurrentUser) -> Scope:
-    return get_scope(current.roles, "credit")
-
-
 async def _verify_company_access(
     db: AsyncSession, current: CurrentUser, company_id: int
 ) -> CreditCompany:
-    """统一的"查 company + scope 校验"。
-    未命中 / OWN 不匹配 → 一律 404,文案一致,不暴露存在性(RBAC 规范 §8.3)。
+    """查 company,未命中 404(不暴露存在性)。
+
+    Δ5 后 credit:read 仅 BUYER/OPERATOR 持有(均 scope=ALL),不再有 OWN 数据范围,
+    故无需按角色过滤;require_permission 已在路由层拦截无权角色。
     """
     company = await db.get(CreditCompany, company_id)
     if company is None:
         raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
-    if _credit_read_scope(current) == Scope.OWN:
-        sup_org_id = _supplier_org_id_or_none(current)
-        if sup_org_id is None or company.linked_supplier_org_id != sup_org_id:
-            raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
     return company
 
 
@@ -116,13 +102,12 @@ async def search_companies(
     current: CurrentUser = Depends(require_permission(Permissions.CREDIT_READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    # scope=OWN(SUPPLIER):未关联 SupplierOrg → 直接空;否则按 linked_supplier_org_id 过滤
-    if _credit_read_scope(current) == Scope.OWN:
-        sup_org_id = _supplier_org_id_or_none(current)
-        if sup_org_id is None:
-            return success([])
-
-    stmt = select(CreditCompany)
+    # Δ5 定位变更:评估对象 = 平台已注册 Supplier
+    # → INNER JOIN supplier_organizations,只返回有 Supplier 关联的 credit_company
+    stmt = select(CreditCompany).join(
+        SupplierOrganization,
+        CreditCompany.linked_supplier_org_id == SupplierOrganization.id,
+    )
     if country:
         stmt = stmt.where(CreditCompany.country_code == country.upper())
     if q:
@@ -133,10 +118,6 @@ async def search_companies(
                 CreditCompany.legal_name_en.ilike(like),
                 CreditCompany.registration_no.ilike(like),
             )
-        )
-    if _credit_read_scope(current) == Scope.OWN:
-        stmt = stmt.where(
-            CreditCompany.linked_supplier_org_id == _supplier_org_id_or_none(current)
         )
     stmt = stmt.order_by(CreditCompany.created_at.desc()).limit(SEARCH_RESULT_LIMIT)
     companies = list((await db.execute(stmt)).scalars().all())
@@ -202,17 +183,24 @@ async def get_company_detail(
     )
     snapshot = (await db.execute(snap_stmt)).scalar_one_or_none()
 
-    # 没快照说明 seed 阶段评分还未触发(异常路径)→ 触发一次
+    # Δ5 优雅降级:异步评分未完成 / 失败 → 无 snapshot,返回企业基础信息 + score=null
+    # 前端据此展示"评分生成中,请稍后刷新"(不再现算,避免详情页阻塞)
     if snapshot is None:
-        engine = ScoringEngine(resolve_data_source(company.country_code))
-        snapshot = await engine.compute(
-            session=db,
-            company_id=company_id,
-            trigger_type=TriggerType.INITIAL,
-            trigger_detail={"source": "detail_view_fallback"},
-            operator_user_id=current.id,
+        payload = CompanyDetailOut(
+            id=company.id,
+            name=company.name,
+            legal_name_en=company.legal_name_en,
+            country_code=company.country_code,
+            registration_no=company.registration_no,
+            snapshot=None,
+            dimensions=[],
+            details=[],
+            basic=None,
+            finance=None,
+            legal=None,
+            certifications=[],
         )
-        await db.commit()
+        return success(payload.model_dump(mode="json"))
 
     # ai_summary 为空时同步生成(工单 Step 11)
     if snapshot.ai_summary is None:

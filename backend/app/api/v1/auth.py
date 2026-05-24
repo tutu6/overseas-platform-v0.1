@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -27,6 +27,7 @@ from app.schemas.auth import (
 )
 from app.schemas.me import ChangeEmailIn, ChangePhoneIn, ChangeUsernameIn, ProfileUpdateIn
 from app.services import auth_service, me_service
+from app.services.credit.registration_hook import initialize_credit_for_new_supplier
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -55,9 +56,10 @@ async def register_buyer(
 async def register_supplier(
     body: SupplierRegisterIn,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    user = await auth_service.register_supplier(
+    user, supplier_org_id = await auth_service.register_supplier(
         db,
         email=body.email,
         name=body.name,
@@ -68,6 +70,10 @@ async def register_supplier(
         registration_no=body.registration_no,
         language_preference=body.language_preference,
         request=request,
+    )
+    # 注册即评分:异步生成信用评分初始化(独立 session,失败不影响注册)
+    background_tasks.add_task(
+        initialize_credit_for_new_supplier, supplier_org_id=supplier_org_id
     )
     return success(RegisterOut(user_id=user.id, email=user.email).model_dump())
 

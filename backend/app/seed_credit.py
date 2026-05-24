@@ -11,39 +11,24 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
-from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base import _utcnow
 from app.db.models import (
-    CertStatus,
-    CertType,
-    CreditCompany,
-    CreditCompanyBasicData,
-    CreditCompanyCertification,
-    CreditCompanyFinanceData,
-    CreditCompanyLegalData,
-    DataSourceTag,
     DimensionCode,
-    NegativeNewsLevel,
-    RevenueTrend,
-    CashFlowStatus,
     ScoreDimension,
     ScoreDimensionOverride,
     ScoreRule,
+    ScoreSnapshot,
     ScoreSubitem,
-    TriggerType,
 )
-from app.services.credit.data_source.mock_data_source import MockDataSource
+from app.db.models.supplier_organization import SupplierOrganization, SupplierOrgStatus
 from app.services.credit.evaluators import (
     DIMENSION_OVERRIDE_EVALUATORS,
     SUBITEM_EVALUATORS,
 )
-from app.services.credit.scoring_engine import ScoringEngine
+from app.services.credit.registration_hook import create_credit_for_supplier
 
 logger = logging.getLogger(__name__)
 
@@ -189,177 +174,6 @@ _DIMENSION_OVERRIDES: list[tuple[str, str, str, int, str, int]] = [
 ]
 
 
-# =============================================================================
-# 4 家 demo 企业 mock 数据
-# =============================================================================
-
-_TODAY = date.today()
-
-
-def _date(s: str) -> date:
-    return date.fromisoformat(s)
-
-
-_DEMO_COMPANIES: list[dict[str, Any]] = [
-    # ---------- A 档:沙特 Al-Rashid Industrial Co. ----------
-    {
-        "name": "Al-Rashid Industrial Co.",
-        "legal_name_en": "Al-Rashid Industrial Company",
-        "country_code": "SA",
-        "registration_no": "1010-XXXXX-A1",
-        "expected_grade": "A",
-        "basic": {
-            "established_date": _date("2008-04-15"),
-            "registered_capital": "50,000,000 SAR",
-            "business_scope": "海外工程总承包、建材进出口、机电安装",
-            "legal_representative": "Mohammed Al-Rashid",
-            "shareholders": "Al-Rashid Group 60%, KSA Investment Co. 40%(完整披露)",
-            "status_text": "normal",
-            "address": "King Fahd Road, Riyadh, KSA",
-            "website": "https://al-rashid.example.com",
-        },
-        "finance": {
-            "revenue_trend": RevenueTrend.GROWING,
-            "debt_ratio": Decimal("58.50"),
-            "cash_flow_status": CashFlowStatus.POSITIVE,
-        },
-        "legal": {
-            "litigation_count": 0,
-            "defaulter_unresolved_count": 0,
-            "defaulter_resolved_count": 0,
-            "negative_news_level": NegativeNewsLevel.NONE,
-        },
-        "certs": [
-            {"cert_type": CertType.MANDATORY_COUNTRY, "cert_name": "SASO Certificate",
-             "target_country_code": "SA", "issuer": "Saudi Standards (SASO)",
-             "issued_at": _date("2024-01-10"), "expires_at": _date("2027-01-09"),
-             "status": CertStatus.VALID},
-            {"cert_type": CertType.SYSTEM_GENERAL, "cert_name": "ISO 9001:2015",
-             "issuer": "TÜV NORD", "issued_at": _date("2024-06-01"),
-             "expires_at": _date("2027-05-31"), "status": CertStatus.VALID},
-            {"cert_type": CertType.SYSTEM_GENERAL, "cert_name": "ISO 14001:2015",
-             "issuer": "TÜV NORD", "issued_at": _date("2024-06-01"),
-             "expires_at": _date("2027-05-31"), "status": CertStatus.VALID},
-            {"cert_type": CertType.INDUSTRY_SPECIFIC, "cert_name": "CE Marking",
-             "issuer": "Notified Body 0123", "issued_at": _date("2024-09-12"),
-             "expires_at": _date("2029-09-11"), "status": CertStatus.VALID},
-            {"cert_type": CertType.INDUSTRY_SPECIFIC, "cert_name": "UL Listed",
-             "issuer": "UL LLC", "issued_at": _date("2024-02-20"),
-             "expires_at": _date("2029-02-19"), "status": CertStatus.VALID},
-            {"cert_type": CertType.INDUSTRY_SPECIFIC, "cert_name": "OHSAS 18001",
-             "issuer": "BSI", "issued_at": _date("2024-04-01"),
-             "expires_at": _date("2027-03-31"), "status": CertStatus.VALID},
-        ],
-    },
-    # ---------- B 档:印尼 PT Cahaya Sentosa ----------
-    {
-        "name": "PT Cahaya Sentosa",
-        "legal_name_en": "PT Cahaya Sentosa Tbk",
-        "country_code": "ID",
-        "registration_no": "AHU-B2",
-        "expected_grade": "B",
-        "basic": {
-            "established_date": _date("2012-08-20"),
-            "registered_capital": "15,000,000,000 IDR",
-            "business_scope": "建材贸易、工程咨询",
-            "legal_representative": "Budi Santoso",
-            "shareholders": "Sentosa Holding(部分披露,具体股权比例未公开)",
-            "status_text": "normal",
-            "address": "Jakarta, Indonesia",
-            "website": "https://cahaya-sentosa.example.id",
-        },
-        "finance": {
-            "revenue_trend": RevenueTrend.FLUCTUATING,
-            "debt_ratio": Decimal("75.20"),
-            "cash_flow_status": CashFlowStatus.POSITIVE,
-        },
-        "legal": {
-            "litigation_count": 2,
-            "defaulter_unresolved_count": 0,
-            "defaulter_resolved_count": 0,
-            "negative_news_level": NegativeNewsLevel.OCCASIONAL,
-        },
-        "certs": [
-            {"cert_type": CertType.MANDATORY_COUNTRY, "cert_name": "SNI Certificate",
-             "target_country_code": "ID", "issuer": "BSN", "issued_at": _date("2023-11-01"),
-             "expires_at": _date("2026-10-31"), "status": CertStatus.VALID},
-            {"cert_type": CertType.SYSTEM_GENERAL, "cert_name": "ISO 9001:2015",
-             "issuer": "Sucofindo ICS", "issued_at": _date("2024-03-15"),
-             "expires_at": _date("2027-03-14"), "status": CertStatus.VALID},
-            {"cert_type": CertType.INDUSTRY_SPECIFIC, "cert_name": "CE Marking",
-             "issuer": "Notified Body 0035", "issued_at": _date("2024-01-08"),
-             "expires_at": _date("2029-01-07"), "status": CertStatus.VALID},
-        ],
-    },
-    # ---------- C 档:巴基斯坦 Karachi Steel Works Ltd. ----------
-    {
-        "name": "Karachi Steel Works Ltd.",
-        "legal_name_en": "Karachi Steel Works Limited",
-        "country_code": "PK",
-        "registration_no": "SECP-C3",
-        "expected_grade": "C",
-        "basic": {
-            "established_date": _date("2015-03-10"),
-            # 缺资本金
-            "registered_capital": None,
-            "business_scope": "钢材加工与出口",
-            "legal_representative": "Ahmad Khan",
-            "shareholders": "Ahmad Khan Family Trust(部分披露)",
-            "status_text": "normal",
-            "address": "Karachi, Pakistan",
-            "website": None,
-        },
-        "finance": {
-            "revenue_trend": RevenueTrend.FLUCTUATING,
-            "debt_ratio": Decimal("78.00"),
-            "cash_flow_status": CashFlowStatus.NEGATIVE_WITH_FUNDING,
-        },
-        "legal": {
-            "litigation_count": 3,
-            "defaulter_unresolved_count": 0,
-            "defaulter_resolved_count": 1,
-            "negative_news_level": NegativeNewsLevel.OCCASIONAL,
-        },
-        "certs": [
-            # 目标国 PK 强制认证已过期
-            {"cert_type": CertType.MANDATORY_COUNTRY, "cert_name": "PSQCA Mark",
-             "target_country_code": "PK", "issuer": "PSQCA",
-             "issued_at": _date("2020-05-01"), "expires_at": _date("2023-04-30"),
-             "status": CertStatus.EXPIRED},  # 注意:这会触发 cert_critical_problem!
-            {"cert_type": CertType.SYSTEM_GENERAL, "cert_name": "ISO 9001:2015",
-             "issuer": "TÜV PAK", "issued_at": _date("2023-09-01"),
-             "expires_at": _date("2026-08-31"), "status": CertStatus.VALID},
-        ],
-    },
-    # ---------- D 档:摩洛哥 Atlas Construction SARL(触发司法一票否决)----------
-    {
-        "name": "Atlas Construction SARL",
-        "legal_name_en": "Atlas Construction SARL",
-        "country_code": "MA",
-        "registration_no": "RC-D4",
-        "expected_grade": "D",
-        "basic": {
-            "established_date": _date("2018-11-22"),
-            "registered_capital": "5,000,000 MAD",
-            "business_scope": "建筑工程总承包",
-            "legal_representative": "Hassan El Idrissi",
-            "shareholders": "",  # 无法查证
-            "status_text": "abnormal",  # 存续但有异常
-            "address": "Casablanca, Morocco",
-            "website": None,
-        },
-        # finance 数据完全缺失 → 整维度走 missing override
-        "finance": None,
-        "legal": {
-            "litigation_count": 15,
-            "defaulter_unresolved_count": 2,  # 触发一票否决
-            "defaulter_resolved_count": 3,
-            "negative_news_level": NegativeNewsLevel.PERSISTENT,
-        },
-        "certs": [],
-    },
-]
-
 
 # =============================================================================
 # Seed 主流程
@@ -491,124 +305,68 @@ async def seed_credit_dimension_overrides(db: AsyncSession) -> None:
         )
 
 
+# 4 家 demo「已注册 Supplier」:(name, country, registration_no, tier)
+# 信用评估新定位 = 评估平台已注册 Supplier;每家先建 supplier_org,再建 credit 镜像 + 评分。
+_DEMO_SUPPLIERS: list[tuple[str, str, str, str]] = [
+    ("Al-Rashid Industrial Co.", "SA", "1010-XXXXX-A1", "A"),
+    ("PT Cahaya Sentosa", "ID", "AHU-B2", "B"),
+    ("Karachi Steel Works Ltd.", "PK", "SECP-C3", "C"),
+    ("Atlas Construction SARL", "MA", "RC-D4", "D"),
+]
+
+
 async def seed_credit_demo_companies(db: AsyncSession) -> None:
-    """种入 4 家 demo 企业 + 各类数据 + 首次评分。
+    """种入 4 家 demo「已注册 Supplier」+ credit 镜像 + mock 数据 + 首次评分。
 
-    幂等:按 (country_code, name) 检查是否已存在;已存在则全部跳过(含评分)。
+    信用评估定位变更(工单 Δ5):评估对象 = 平台已注册 Supplier。
+    每家:supplier_organizations(APPROVED) → credit_company 镜像 → 评分。
+    幂等:supplier_org 按 (country_code, registration_no) 查;credit 镜像由
+    create_credit_for_supplier 内部幂等。seed 不调 LLM(run_ai=False,启动快;
+    首访详情页时再生成 ai_summary)。
     """
-    engine = ScoringEngine(MockDataSource())
-
-    for spec in _DEMO_COMPANIES:
+    for name, country, regno, tier in _DEMO_SUPPLIERS:
         row = await db.execute(
-            select(CreditCompany).where(
-                CreditCompany.country_code == spec["country_code"],
-                CreditCompany.name == spec["name"],
+            select(SupplierOrganization).where(
+                SupplierOrganization.country_code == country,
+                SupplierOrganization.registration_no == regno,
             )
         )
-        if row.scalar_one_or_none() is not None:
-            continue  # 已存在,整家跳过
-
-        # 1. 企业主表
-        company = CreditCompany(
-            name=spec["name"],
-            legal_name_en=spec["legal_name_en"],
-            country_code=spec["country_code"],
-            registration_no=spec["registration_no"],
-            linked_supplier_org_id=None,
-            data_status={"expected_grade": spec["expected_grade"]},
-        )
-        db.add(company)
-        await db.flush()
-
-        # 2. basic
-        b = spec["basic"]
-        db.add(
-            CreditCompanyBasicData(
-                company_id=company.id,
-                established_date=b["established_date"],
-                registered_capital=b["registered_capital"],
-                business_scope=b["business_scope"],
-                legal_representative=b["legal_representative"],
-                shareholders=b["shareholders"],
-                status_text=b["status_text"],
-                address=b["address"],
-                website=b["website"],
-                data_source=DataSourceTag.MOCK,
-                fetched_at=_utcnow(),
+        org = row.scalar_one_or_none()
+        if org is None:
+            org = SupplierOrganization(
+                name=name,
+                country_code=country,
+                registration_no=regno,
+                status=SupplierOrgStatus.APPROVED,
             )
-        )
+            db.add(org)
+            await db.flush()
 
-        # 3. finance(D 档为 None,跳过)
-        if spec["finance"] is not None:
-            f = spec["finance"]
-            db.add(
-                CreditCompanyFinanceData(
-                    company_id=company.id,
-                    revenue_trend=f["revenue_trend"],
-                    debt_ratio=f["debt_ratio"],
-                    cash_flow_status=f["cash_flow_status"],
-                    raw_data=None,
-                    data_source=DataSourceTag.MOCK,
-                    fetched_at=_utcnow(),
-                )
-            )
-
-        # 4. legal
-        leg = spec["legal"]
-        db.add(
-            CreditCompanyLegalData(
-                company_id=company.id,
-                litigation_count=leg["litigation_count"],
-                defaulter_unresolved_count=leg["defaulter_unresolved_count"],
-                defaulter_resolved_count=leg["defaulter_resolved_count"],
-                negative_news_level=leg["negative_news_level"],
-                raw_data=None,
-                data_source=DataSourceTag.MOCK,
-                fetched_at=_utcnow(),
-            )
-        )
-
-        # 5. certs
-        for c in spec["certs"]:
-            db.add(
-                CreditCompanyCertification(
-                    company_id=company.id,
-                    cert_type=c["cert_type"],
-                    cert_name=c["cert_name"],
-                    target_country_code=c.get("target_country_code"),
-                    issuer=c.get("issuer"),
-                    issued_at=c.get("issued_at"),
-                    expires_at=c.get("expires_at"),
-                    status=c["status"],
-                    data_source=DataSourceTag.MOCK,
-                )
-            )
-
-        await db.commit()  # 数据落地后再算分,引擎需要从 DB 读
-        logger.info(
-            "Credit seed: 企业 %s 数据写入完成,开始首次评分", company.name
-        )
-
-        # 6. 首次评分(不调 LLM,工单 Step 10)
-        snapshot = await engine.compute(
-            session=db,
-            company_id=company.id,
-            trigger_type=TriggerType.INITIAL,
-            trigger_detail={"source": "seed"},
-            operator_user_id=None,
+        created = await create_credit_for_supplier(
+            db, org, target_tier=tier, source="seed", run_ai=False
         )
         await db.commit()
 
-        logger.info(
-            "Credit seed: 企业 %s 首次评分 = %d (%s),预期 %s",
-            company.name, snapshot.total_score, snapshot.grade,
-            spec["expected_grade"],
-        )
-        if snapshot.grade != spec["expected_grade"]:
-            logger.warning(
-                "Credit seed: 企业 %s 实际评级 %s 与预期 %s 不一致(检查 mock 数据 / 规则)",
-                company.name, snapshot.grade, spec["expected_grade"],
+        if created is None:
+            logger.info("Credit seed: Supplier %s 已有信用镜像,跳过", name)
+            continue
+
+        snapshot = (await db.execute(
+            select(ScoreSnapshot).where(
+                ScoreSnapshot.company_id == created.id,
+                ScoreSnapshot.is_current.is_(True),
             )
+        )).scalar_one_or_none()
+        if snapshot is not None:
+            logger.info(
+                "Credit seed: Supplier %s 首次评分 = %d (%s),预期 %s",
+                name, snapshot.total_score, snapshot.grade, tier,
+            )
+            if snapshot.grade != tier:
+                logger.warning(
+                    "Credit seed: Supplier %s 实际评级 %s 与预期 %s 不一致(检查 mock / 规则)",
+                    name, snapshot.grade, tier,
+                )
 
 
 async def seed_credit_module(db: AsyncSession) -> None:

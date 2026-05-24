@@ -106,7 +106,7 @@ export const ROLE_RESOURCE_SCOPE: Record<RoleCode, Record<ResourceCode, Scope>> 
     user: "NONE", role: "NONE", permission: "NONE", system: "NONE",
   },
   SUPPLIER: {
-    supplier: "OWN", product: "OWN", country: "ALL", credit: "OWN",
+    supplier: "OWN", product: "OWN", country: "ALL", credit: "NONE",
     project: "NONE", purchase_list: "NONE", cart: "NONE",
     rfq: "OWN", quote: "OWN", order: "OWN",
     membership: "OWN", risk: "NONE",
@@ -150,7 +150,6 @@ export const ROLE_RESOURCE_PERMISSIONS: Record<
     supplier: [Permissions.SUPPLIER_READ, Permissions.SUPPLIER_WRITE],
     product: [Permissions.PRODUCT_READ, Permissions.PRODUCT_WRITE],
     country: [Permissions.COUNTRY_READ],
-    credit: [Permissions.CREDIT_READ],
     rfq: [Permissions.RFQ_READ, Permissions.RFQ_RESPOND],
     quote: [Permissions.QUOTE_READ, Permissions.QUOTE_WRITE],
     order: [Permissions.ORDER_READ, Permissions.ORDER_WRITE, Permissions.ORDER_CHECKIN],

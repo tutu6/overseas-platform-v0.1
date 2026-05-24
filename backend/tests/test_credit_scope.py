@@ -1,10 +1,9 @@
-"""信用评估接口的 RBAC scope 测试。
+"""信用评估接口的 RBAC + Δ5 注册即评分测试。
 
 覆盖:
-- ADMIN 不持有任何 credit:* → 调任意 credit 接口均 403
-- SUPPLIER 持有 credit:read 但 scope=OWN → 看不到 linked_supplier_org_id 不匹配的企业
+- ADMIN / SUPPLIER 均不持有 credit:* → 调任意 credit 接口均 403
 - BUYER / OPERATOR scope=ALL → 行为不变
-- SUPPLIER 在自家 company(linked_supplier_org_id 匹配)上仍可正常 read
+- 注册新 Supplier → 异步建 credit 镜像 + 评分,BUYER 可搜到带 grade
 """
 from __future__ import annotations
 
@@ -12,9 +11,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import CreditCompany
-from app.db.models.supplier_member import SupplierMember
-from app.db.models.supplier_organization import SupplierOrganization
+from app.db.models import CreditCompany, ScoreSnapshot
+from app.db.models.supplier_organization import SupplierOrganization, SupplierOrgStatus
+from app.services.credit.registration_hook import create_credit_for_supplier
 
 
 # -------- 登录工具 --------
@@ -116,69 +115,112 @@ async def test_operator_search_sees_demo_companies(client):
     assert len(r.json()["data"]) >= 1
 
 
-# -------- SUPPLIER scope=OWN --------
+# -------- SUPPLIER 彻底无 credit 权限(Δ5)--------
 
 @pytest.mark.asyncio
-async def test_supplier_search_empty_when_no_linked_company(client):
-    """SUPPLIER 注册后无任何 credit_company 关联 → 列表为空(scope=OWN 强制过滤)。"""
+async def test_supplier_search_403(client):
+    """SUPPLIER 不持有 credit:read → search 直接 403。"""
     t = await _register_supplier(client, "sup.credit1@x.com", "13900139601", "S Credit 1")
     r = await client.get("/api/v1/credit/companies/search?country=&q=", headers=_auth(t))
-    assert r.status_code == 200
-    assert r.json()["data"] == []
+    assert r.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_supplier_detail_404_when_not_linked(client, test_engine):
-    """SUPPLIER 访问任意 demo 企业详情 → 404(linked_supplier_org_id 不匹配)。
-    文案与"真不存在"一致,不暴露存在性。
-    """
+async def test_supplier_detail_403(client, test_engine):
     t = await _register_supplier(client, "sup.credit2@x.com", "13900139602", "S Credit 2")
-    # 找一个已存在的 demo 企业 id
     SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
     async with SessionLocal() as db:
         cid = (await db.execute(select(CreditCompany.id).limit(1))).scalar_one()
     r = await client.get(f"/api/v1/credit/companies/{cid}", headers=_auth(t))
-    assert r.status_code == 404
+    assert r.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_supplier_ai_create_404_when_not_linked(client, test_engine):
+async def test_supplier_ai_create_403(client):
     t = await _register_supplier(client, "sup.credit3@x.com", "13900139603", "S Credit 3")
-    SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
-    async with SessionLocal() as db:
-        cid = (await db.execute(select(CreditCompany.id).limit(1))).scalar_one()
     r = await client.post(
-        "/api/v1/credit/ai/conversations", json={"company_id": cid}, headers=_auth(t)
+        "/api/v1/credit/ai/conversations", json={"company_id": 1}, headers=_auth(t)
     )
-    assert r.status_code == 404
+    assert r.status_code == 403
+
+
+# -------- Δ5 注册即评分闭环 --------
+
+@pytest.mark.asyncio
+async def test_register_supplier_endpoint_succeeds(client):
+    """注册接口注入了 BackgroundTasks 异步评分,但异步失败被吞,注册本身始终 200。
+
+    (异步任务真正建镜像 + 评分的逻辑由 test_create_credit_for_supplier 直接验证;
+    此处只验证 wiring 不破坏注册主流程 / 失败隔离。)
+    """
+    r = await client.post(
+        "/api/v1/auth/register/supplier",
+        json={"email": "sup.newco@x.com", "name": "S", "phone": "13900139700",
+              "password": "Aa123456789", "company_name": "Newco Trading Ltd.",
+              "country_code": "CN", "registration_no": "SC-NEWCO", "language_preference": "zh"},
+    )
+    assert r.status_code in (200, 201), r.text
 
 
 @pytest.mark.asyncio
-async def test_supplier_search_sees_own_linked_company(client, test_engine):
-    """positive path:SUPPLIER 的 supplier_org 与某 company 的 linked_supplier_org_id 匹配 → 看得见。"""
-    t = await _register_supplier(client, "sup.credit4@x.com", "13900139604", "S Credit 4")
+async def test_create_credit_for_supplier_builds_mirror_and_score(client, test_engine):
+    """直接验证注册钩子核心:建 credit_company 镜像 + mock 数据 + 评分快照。
 
+    用 test_engine 的同循环 session 调用(避开 BackgroundTasks 的 AsyncSessionLocal
+    跨事件循环限制)。client fixture 已 seed 评分模型骨架。
+    """
     SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
     async with SessionLocal() as db:
-        # 取 SUPPLIER 的 supplier_org_id
-        row = await db.execute(
-            select(SupplierMember.supplier_org_id).join(
-                SupplierOrganization, SupplierOrganization.id == SupplierMember.supplier_org_id
-            ).where(SupplierOrganization.name == "S Credit 4")
+        org = SupplierOrganization(
+            name="Hook Test Co.", country_code="CN", registration_no="SC-HOOK-1",
+            status=SupplierOrgStatus.APPROVED,
         )
-        sup_org_id = row.scalar_one()
-        # 给一家 demo 企业贴上 linked_supplier_org_id
-        comp = (await db.execute(select(CreditCompany).limit(1))).scalar_one()
-        comp.linked_supplier_org_id = sup_org_id
+        db.add(org)
+        await db.flush()
+
+        company = await create_credit_for_supplier(
+            db, org, target_tier="A", source="test", run_ai=False
+        )
         await db.commit()
-        linked_id = comp.id
 
-    r = await client.get("/api/v1/credit/companies/search?country=&q=", headers=_auth(t))
-    assert r.status_code == 200
-    items = r.json()["data"]
-    assert len(items) == 1
-    assert items[0]["id"] == linked_id
+        assert company is not None
+        assert company.linked_supplier_org_id == org.id
 
-    # 详情也能看
-    r2 = await client.get(f"/api/v1/credit/companies/{linked_id}", headers=_auth(t))
-    assert r2.status_code == 200
+        snap = (await db.execute(
+            select(ScoreSnapshot).where(
+                ScoreSnapshot.company_id == company.id,
+                ScoreSnapshot.is_current.is_(True),
+            )
+        )).scalar_one_or_none()
+        assert snap is not None
+        assert snap.grade in ("A", "B", "C", "D")
+        assert snap.total_score is not None
+
+        # 幂等:再次调用返回 None(不重复建)
+        again = await create_credit_for_supplier(db, org, target_tier="A", run_ai=False)
+        assert again is None
+
+
+@pytest.mark.asyncio
+async def test_create_credit_tiers_distribution(client, test_engine):
+    """A/B/C/D 四档各跑出对应等级(验证 mock 生成器 + 规则对齐)。"""
+    SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
+    async with SessionLocal() as db:
+        for i, tier in enumerate(["A", "B", "C", "D"]):
+            org = SupplierOrganization(
+                name=f"Tier {tier} Co.", country_code="CN",
+                registration_no=f"SC-TIER-{i}", status=SupplierOrgStatus.APPROVED,
+            )
+            db.add(org)
+            await db.flush()
+            company = await create_credit_for_supplier(
+                db, org, target_tier=tier, source="test", run_ai=False
+            )
+            await db.commit()
+            snap = (await db.execute(
+                select(ScoreSnapshot).where(
+                    ScoreSnapshot.company_id == company.id,
+                    ScoreSnapshot.is_current.is_(True),
+                )
+            )).scalar_one()
+            assert snap.grade == tier, f"tier {tier} 实际评级 {snap.grade}"
