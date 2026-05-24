@@ -99,6 +99,15 @@ export const PUBLIC_NAV: NavItem[] = [
     description: "马甲关系 / 价格异常 / 合规雷达(占位,功能开发中)",
   },
   {
+    path: "/suppliers",
+    label: "供应商目录",
+    labelEn: "Suppliers",
+    icon: Store,
+    resource: "supplier",
+    requiredPermissions: [],
+    description: "供应商目录与画像(占位,功能开发中)",
+  },
+  {
     path: "/mall",
     label: "严选商城",
     labelEn: "Mall",
