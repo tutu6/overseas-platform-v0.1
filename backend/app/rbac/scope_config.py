@@ -77,7 +77,9 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.OWN,
         "product":       Scope.OWN,
         "country":       Scope.ALL,
-        "credit":        Scope.ALL,
+        # 信用评估:SUPPLIER 只能看自家企业(linked_supplier_org_id = 自身 supplier_org_id)
+        # PRD v0.1 §8.1:绝对不可查看平台内其他供应商的分数
+        "credit":        Scope.OWN,
         "project":       Scope.NONE,
         "purchase_list": Scope.NONE,
         "cart":          Scope.NONE,
@@ -113,8 +115,9 @@ ROLE_RESOURCE_SCOPE: dict[str, dict[str, Scope]] = {
         "supplier":      Scope.NONE,
         "product":       Scope.NONE,
         "country":       Scope.NONE,
-        # 信用评估视为"专业版企查查"全员查询能力,Q25 在此放宽(工单 §3.7 + 技术方案 §六)
-        "credit":        Scope.ALL,
+        # 信用评估:ADMIN 严格不触业务数据(Q25 + RBAC 规范 §4.3 / §8.6 职责分离)
+        # 权限点已在 permissions_config.py 中不授予,scope 这里同步 NONE 兜底
+        "credit":        Scope.NONE,
         "project":       Scope.NONE,
         "purchase_list": Scope.NONE,
         "cart":          Scope.NONE,

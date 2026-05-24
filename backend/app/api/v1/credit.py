@@ -6,9 +6,11 @@
 - 搜索历史(查 / 删)
 - AI 会话 + 流式消息
 
-权限:
-- credit:read         全员
-- credit:recompute    OPERATOR / ADMIN
+权限点与 scope(详见 app/rbac/scope_config.py):
+- credit:read         BUYER / OPERATOR / SUPPLIER(ADMIN 不持有)
+                      SUPPLIER scope=OWN,只能看 linked_supplier_org_id 等于自身 supplier_org_id 的数据
+                      其他角色 scope=ALL
+- credit:recompute    OPERATOR(ADMIN/SUPPLIER 不持有,require_permission 阶段直接 403)
 """
 from __future__ import annotations
 
@@ -38,6 +40,7 @@ from app.db.models import (
 )
 from app.rbac.constants import Permissions
 from app.rbac.guards import require_permission
+from app.rbac.scope_config import Scope, get_scope
 from app.db.session import get_db
 from app.schemas.credit import (
     AiConversationCreateIn,
@@ -74,6 +77,34 @@ def _llm_service() -> QwenChatService:
     return QwenChatService(settings)
 
 
+def _supplier_org_id_or_none(current: CurrentUser) -> int | None:
+    """SUPPLIER 用户取 supplier_org_id;非 SUPPLIER 或未关联 → None。"""
+    org = current.organization
+    if org is not None and org.type == "SUPPLIER_ORG":
+        return org.id
+    return None
+
+
+def _credit_read_scope(current: CurrentUser) -> Scope:
+    return get_scope(current.roles, "credit")
+
+
+async def _verify_company_access(
+    db: AsyncSession, current: CurrentUser, company_id: int
+) -> CreditCompany:
+    """统一的"查 company + scope 校验"。
+    未命中 / OWN 不匹配 → 一律 404,文案一致,不暴露存在性(RBAC 规范 §8.3)。
+    """
+    company = await db.get(CreditCompany, company_id)
+    if company is None:
+        raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
+    if _credit_read_scope(current) == Scope.OWN:
+        sup_org_id = _supplier_org_id_or_none(current)
+        if sup_org_id is None or company.linked_supplier_org_id != sup_org_id:
+            raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
+    return company
+
+
 # =============================================================================
 # 1. 搜索候选企业
 # =============================================================================
@@ -85,6 +116,12 @@ async def search_companies(
     current: CurrentUser = Depends(require_permission(Permissions.CREDIT_READ)),
     db: AsyncSession = Depends(get_db),
 ):
+    # scope=OWN(SUPPLIER):未关联 SupplierOrg → 直接空;否则按 linked_supplier_org_id 过滤
+    if _credit_read_scope(current) == Scope.OWN:
+        sup_org_id = _supplier_org_id_or_none(current)
+        if sup_org_id is None:
+            return success([])
+
     stmt = select(CreditCompany)
     if country:
         stmt = stmt.where(CreditCompany.country_code == country.upper())
@@ -96,6 +133,10 @@ async def search_companies(
                 CreditCompany.legal_name_en.ilike(like),
                 CreditCompany.registration_no.ilike(like),
             )
+        )
+    if _credit_read_scope(current) == Scope.OWN:
+        stmt = stmt.where(
+            CreditCompany.linked_supplier_org_id == _supplier_org_id_or_none(current)
         )
     stmt = stmt.order_by(CreditCompany.created_at.desc()).limit(SEARCH_RESULT_LIMIT)
     companies = list((await db.execute(stmt)).scalars().all())
@@ -136,9 +177,7 @@ async def get_company_detail(
     current: CurrentUser = Depends(require_permission(Permissions.CREDIT_READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    company = await db.get(CreditCompany, company_id)
-    if company is None:
-        raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
+    company = await _verify_company_access(db, current, company_id)
 
     # 写搜索历史(同 company 去重:删旧+写新)
     await db.execute(
@@ -406,9 +445,7 @@ async def create_ai_conversation(
     current: CurrentUser = Depends(require_permission(Permissions.CREDIT_READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    company = await db.get(CreditCompany, body.company_id)
-    if company is None:
-        raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
+    await _verify_company_access(db, current, body.company_id)
     conv = CreditAiConversation(
         user_id=current.id,
         company_id=body.company_id,
@@ -431,6 +468,8 @@ async def get_ai_conversation(
     conv = await db.get(CreditAiConversation, conv_id)
     if conv is None or conv.user_id != current.id:
         raise BusinessError(http_status=404, biz_code=40404, message="会话不存在")
+    # 会话关联的 company 必须在 scope 范围内,否则 404(不暴露存在性)
+    await _verify_company_access(db, current, conv.company_id)
     msg_stmt = (
         select(CreditAiMessage)
         .where(CreditAiMessage.conversation_id == conv_id)
@@ -460,9 +499,7 @@ async def send_ai_message(
     if conv is None or conv.user_id != current.id:
         raise BusinessError(http_status=404, biz_code=40404, message="会话不存在")
 
-    company = await db.get(CreditCompany, conv.company_id)
-    if company is None:
-        raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
+    company = await _verify_company_access(db, current, conv.company_id)
 
     # 取当前快照(用于在 system prompt 中提供企业上下文)
     snap = (

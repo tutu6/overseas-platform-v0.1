@@ -87,16 +87,12 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "ADMIN": [
         *_AUTH_BASE,
-        # 系统级,严格不触业务(Q25)
+        # 系统级,严格不触业务(Q25 + RBAC 规范 §4.3 / §8.6 职责分离)
+        # ADMIN 不持有任何 credit:* 权限点 — require_permission 阶段直接 403
         Permissions.USER_MANAGE,
         Permissions.ROLE_MANAGE,
         Permissions.PERMISSION_MANAGE,
         Permissions.SYSTEM_CONFIG,
         Permissions.SYSTEM_AUDIT,
-        # 信用评估 — 工单 §3.7 显式授予 ADMIN 三个 credit:* 权限点
-        # (技术方案 §六 视信用评估为"专业版企查查"全员查询能力,故 Q25 在此放宽)
-        Permissions.CREDIT_READ,
-        Permissions.CREDIT_WRITE,
-        Permissions.CREDIT_RECOMPUTE,
     ],
 }
