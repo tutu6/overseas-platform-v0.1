@@ -219,8 +219,10 @@ async def register_supplier(
     registration_no: str,
     language_preference: str,
     request: Request | None = None,
-) -> User:
+) -> tuple[User, int]:
     """供应商自助注册(PRD v1.3 §4.3)。
+
+    返回 (user, supplier_org_id) —— org_id 供注册接口注入异步评分初始化。
 
     唯一性按 (country_code, registration_no) 复合判定;不同国家可撞号。
     重复时抛 409 + 标准化文案,不暴露已有 owner / 公司名 / 任何字段。
@@ -305,7 +307,7 @@ async def register_supplier(
     )
     await db.commit()
     await db.refresh(user)
-    return user
+    return user, org.id
 
 
 async def login(

@@ -27,9 +27,9 @@ def test_get_scope_admin_business_is_none():
         assert get_scope(["ADMIN"], r) == Scope.NONE
 
 
-def test_get_scope_supplier_credit_is_own():
-    """SUPPLIER 信用评估:scope=OWN(PRD v0.1 §8.1 隔离规则)。"""
-    assert get_scope(["SUPPLIER"], "credit") == Scope.OWN
+def test_get_scope_supplier_credit_is_none():
+    """SUPPLIER 信用评估:Δ5 定位变更后不持有 credit 权限点,scope=NONE。"""
+    assert get_scope(["SUPPLIER"], "credit") == Scope.NONE
 
 
 def test_get_scope_buyer_operator_credit_is_all():
@@ -168,7 +168,7 @@ async def test_debug_matrix_returns_full_mapping(client):
     assert d["role_resource_scope"]["ADMIN"]["user"] == "ALL"
     assert d["role_resource_scope"]["ADMIN"]["project"] == "NONE"
     # 信用评估 scope:SUPPLIER=OWN、ADMIN=NONE、BUYER/OPERATOR=ALL(本工单)
-    assert d["role_resource_scope"]["SUPPLIER"]["credit"] == "OWN"
+    assert d["role_resource_scope"]["SUPPLIER"]["credit"] == "NONE"
     assert d["role_resource_scope"]["ADMIN"]["credit"] == "NONE"
     assert d["role_resource_scope"]["BUYER"]["credit"] == "ALL"
     assert d["role_resource_scope"]["OPERATOR"]["credit"] == "ALL"

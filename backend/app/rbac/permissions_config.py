@@ -59,8 +59,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.ORDER_CHECKIN,
         Permissions.MEMBERSHIP_READ,
         Permissions.MEMBERSHIP_WRITE,
-        # 信用评估 — 仅查看(工单 §3.7)
-        Permissions.CREDIT_READ,
+        # 信用评估:SUPPLIER 不持有任何 credit 权限点(Δ5 定位变更:评估对象=Supplier,
+        # SUPPLIER 暂不可看自家评分;调任何 credit 接口 → 403)
     ],
     "OPERATOR": [
         *_AUTH_BASE,
