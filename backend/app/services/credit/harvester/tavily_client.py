@@ -40,7 +40,16 @@ class TavilyClient:
         max_results: int = 5,
         search_depth: str = "basic",  # basic / advanced
         include_domains: list[str] | None = None,
+        country: str | None = None,
     ) -> list[TavilySearchResult]:
+        """Tavily 搜索。
+
+        Tavily 参数行为(官方文档):
+        - country: 软偏好(boost)。提升指定国家结果排序,不排除他国;取值为国家名小写
+          (如 "cambodia",不是 ISO 码),仅 topic="general" 时生效。
+        - include_domains: 硬过滤。仅返回白名单域名结果,上限 300 个域名。
+        - 两者可叠加:在白名单域名内优先返回指定国家结果。
+        """
         # fail-fast:没有 key 直接报错,不要静默发空请求
         if not self._api_key:
             raise TavilyError("TAVILY_API_KEY 未配置")
@@ -55,6 +64,8 @@ class TavilyClient:
         }
         if include_domains:
             payload["include_domains"] = include_domains
+        if country:
+            payload["country"] = country
 
         try:
             async with httpx.AsyncClient(

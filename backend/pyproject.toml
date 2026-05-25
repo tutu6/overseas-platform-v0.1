@@ -21,6 +21,8 @@ dependencies = [
     "openpyxl>=3.1.0",
     # 信用评估 AI 综合评价 + 对话追问;走 DashScope OpenAI 兼容端点
     "openai>=1.40.0",
+    # Δ7 v0.3:柬埔寨域名白名单 YAML 配置加载
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

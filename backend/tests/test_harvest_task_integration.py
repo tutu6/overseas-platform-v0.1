@@ -52,9 +52,12 @@ async def test_harvest_writes_run_snapshots_and_scores(client, test_engine):
         await db.commit()
 
         assert run.status == "partial_succeeded"
-        assert run.dimensions_status == {
-            "basic": "ok", "finance": "missing", "legal": "partial", "qualification": "ok",
-        }
+        # v0.3:dimensions_status 是详情对象 {status, queries, counts, missing_fields}
+        assert run.dimensions_status["basic"]["status"] == "ok"
+        assert run.dimensions_status["finance"]["status"] == "missing"
+        assert run.dimensions_status["legal"]["status"] == "partial"
+        assert run.dimensions_status["qualification"]["status"] == "ok"
+        assert "queries" in run.dimensions_status["basic"]
         assert run.tavily_calls > 0 and run.llm_calls > 0
 
         # basic 快照落库(带 raw_data + harvest_run_id)
