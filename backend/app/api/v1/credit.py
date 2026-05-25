@@ -18,7 +18,7 @@ import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,7 @@ from app.db.models import (
     CreditAiConversation,
     CreditAiMessage,
     CreditCompany,
+    CreditDataHarvestRun,
     CreditSearchHistory,
     MessageRole,
     ScoreDetail,
@@ -61,6 +62,7 @@ from app.schemas.credit import (
 )
 from app.services.credit.ai_summary_generator import AISummaryGenerator
 from app.services.credit.data_source.registry import resolve_data_source
+from app.services.credit.harvester.harvest_task import manual_harvest
 from app.services.credit.scoring_engine import ScoringEngine
 from app.services.llm import LLMUnavailableError, QwenChatService
 
@@ -89,6 +91,35 @@ async def _verify_company_access(
     if company is None:
         raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
     return company
+
+
+_HARVEST_STATUS_TO_EVAL = {
+    "pending": "pending", "running": "pending",
+    "succeeded": "ready", "partial_succeeded": "ready", "cached_hit": "ready",
+    "failed": "failed",
+}
+
+
+async def _evaluation_status(
+    db: AsyncSession, company: CreditCompany
+) -> tuple[str, dict | None]:
+    """Δ7 评分状态判定。非 KH 公司无 harvest 概念,恒 ready;KH 看最近一条 harvest_run。"""
+    if company.country_code != "KH":
+        return "ready", None
+    run = (await db.execute(
+        select(CreditDataHarvestRun)
+        .where(CreditDataHarvestRun.company_id == company.id)
+        .order_by(CreditDataHarvestRun.started_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if run is None:
+        return "pending", None  # KH 公司注册时应已触发,无 run 是防御态
+    latest = {
+        "id": run.id, "status": run.status, "triggered_by": run.triggered_by,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+    }
+    return _HARVEST_STATUS_TO_EVAL.get(run.status, "pending"), latest
 
 
 # =============================================================================
@@ -159,6 +190,7 @@ async def get_company_detail(
     db: AsyncSession = Depends(get_db),
 ):
     company = await _verify_company_access(db, current, company_id)
+    eval_status, latest_harvest_run = await _evaluation_status(db, company)
 
     # 写搜索历史(同 company 去重:删旧+写新)
     await db.execute(
@@ -199,21 +231,15 @@ async def get_company_detail(
             finance=None,
             legal=None,
             certifications=[],
+            evaluation_status=eval_status,
+            latest_harvest_run=latest_harvest_run,
         )
         return success(payload.model_dump(mode="json"))
 
-    # ai_summary 为空时同步生成(工单 Step 11)
-    if snapshot.ai_summary is None:
-        try:
-            generator = AISummaryGenerator(_llm_service())
-            await generator.generate_for_snapshot(db, snapshot.id)
-            await db.commit()
-            await db.refresh(snapshot)
-        except LLMUnavailableError as exc:
-            # 不阻断详情页渲染;前端会显示"AI 评价暂时不可用"
-            logger.warning("AI summary 生成失败 company_id=%s: %s", company_id, exc)
-        except Exception:  # noqa: BLE001
-            logger.exception("AI summary 生成抛错 company_id=%s", company_id)
+    # AI 评价**不在详情接口里同步生成**:LLM 慢/联网/可能失败,绝不阻塞页面渲染。
+    # 改由评分后台任务(registration_hook / harvest_task)异步生成并落库;
+    # 详情接口只读库,ai_summary 未就绪则返回 null,前端显示"AI 评价生成中"。
+    # 详见 CLAUDE.md「外部慢调用(LLM/网络)不得阻塞请求路径」。
 
     # 12 条 score_detail
     detail_stmt = (
@@ -273,6 +299,8 @@ async def get_company_detail(
         finance=finance_out,
         legal=legal_out,
         certifications=[CertificationOut.model_validate(c) for c in cert_rows],
+        evaluation_status=eval_status,
+        latest_harvest_run=latest_harvest_run,
     )
     return success(payload.model_dump(mode="json"))
 
@@ -317,6 +345,36 @@ async def recompute_company(
         logger.exception("AI summary 生成抛错 company_id=%s", company_id)
 
     return success(SnapshotOut.model_validate(snapshot).model_dump(mode="json"))
+
+
+# =============================================================================
+# 3b. 手动触发数据抓取(Δ7,运营用)
+# =============================================================================
+
+@router.post("/companies/{company_id}/harvest", summary="手动触发数据抓取(运营用)")
+async def trigger_harvest(
+    background_tasks: BackgroundTasks,
+    company_id: int = Path(..., ge=1),
+    force_refresh: bool = Query(False, description="强制刷新(绕过 24h 缓存)"),
+    current: CurrentUser = Depends(require_permission(Permissions.CREDIT_RECOMPUTE)),
+    db: AsyncSession = Depends(get_db),
+):
+    company = await db.get(CreditCompany, company_id)
+    if company is None:
+        raise BusinessError(http_status=404, biz_code=40404, message="企业不存在")
+    # 本期仅柬埔寨支持真实数据源抓取
+    if company.country_code != "KH":
+        raise BusinessError(
+            http_status=400, biz_code=40001,
+            message="当前仅支持柬埔寨企业抓取真实数据源",
+        )
+    background_tasks.add_task(
+        manual_harvest,
+        company_id=company_id,
+        operator_user_id=current.id,
+        force_refresh=force_refresh,
+    )
+    return success({"company_id": company_id, "status": "queued"})
 
 
 # =============================================================================

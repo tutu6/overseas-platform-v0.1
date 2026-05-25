@@ -24,6 +24,11 @@ from app.db.models.credit_company_legal_data import (
     CreditCompanyLegalData,
     NegativeNewsLevel,
 )
+from app.db.models.credit_data_harvest_run import (
+    CreditDataHarvestRun,
+    HarvestRunStatus,
+    HarvestTriggeredBy,
+)
 from app.db.models.credit_search_history import CreditSearchHistory
 from app.db.models.permission import Permission
 from app.db.models.role import Role
@@ -73,6 +78,9 @@ __all__ = [
     "CreditCompanyCertification",
     "CertType",
     "CertStatus",
+    "CreditDataHarvestRun",
+    "HarvestRunStatus",
+    "HarvestTriggeredBy",
     # credit assessment - 评分结果
     "ScoreSnapshot",
     "Grade",

@@ -25,6 +25,22 @@ class LLMService(ABC):
         """
 
     @abstractmethod
+    async def generate_json(
+        self,
+        prompt: str,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> str:
+        """结构化 JSON 输出(Δ7 公开数据抽取专用)。
+
+        实现需保证:
+        - 固定 temperature=0.0(抽取任务不要发散)
+        - 启用 response_format={"type": "json_object"}
+        - 返回原始 JSON 字符串(调用方负责 schema 校验与解析)
+        - 失败抛 LLMUnavailableError
+        """
+
+    @abstractmethod
     async def stream_chat(
         self, messages: list[dict[str, str]]
     ) -> AsyncIterator[str]:

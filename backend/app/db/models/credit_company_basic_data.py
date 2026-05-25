@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin
@@ -47,3 +49,10 @@ class CreditCompanyBasicData(Base, TimestampMixin):
     website: Mapped[str | None] = mapped_column(String(300), nullable=True)
     data_source: Mapped[str] = mapped_column(String(20), nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Δ7:抓取留存的原始 LLM 应答 + 证据 + Tavily 结果;harvest_run_id 追溯抓取批次
+    raw_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    harvest_run_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("credit_data_harvest_run.id", name="fk_credit_basic_harvest_run"),
+        nullable=True,
+    )

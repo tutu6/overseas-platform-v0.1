@@ -27,6 +27,7 @@ from app.schemas.auth import (
 )
 from app.schemas.me import ChangeEmailIn, ChangePhoneIn, ChangeUsernameIn, ProfileUpdateIn
 from app.services import auth_service, me_service
+from app.services.credit.harvester.harvest_task import harvest_after_register
 from app.services.credit.registration_hook import initialize_credit_for_new_supplier
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -74,6 +75,10 @@ async def register_supplier(
     # 注册即评分:异步生成信用评分初始化(独立 session,失败不影响注册)
     background_tasks.add_task(
         initialize_credit_for_new_supplier, supplier_org_id=supplier_org_id
+    )
+    # Δ7:占位评分之后,链尾追加柬埔寨公开数据抓取(仅 KH 生效,内部自行判断)
+    background_tasks.add_task(
+        harvest_after_register, supplier_org_id=supplier_org_id
     )
     return success(RegisterOut(user_id=user.id, email=user.email).model_dump())
 

@@ -10,8 +10,10 @@ status:valid / expired / suspicious_forged(伪造或可疑触发维度2 清零)
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from sqlalchemy import Date, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampUpdateMixin
@@ -52,3 +54,10 @@ class CreditCompanyCertification(Base, TimestampUpdateMixin):
     expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     data_source: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Δ7:抓取留存的原始 LLM 应答;harvest_run_id 追溯抓取批次
+    raw_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    harvest_run_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("credit_data_harvest_run.id", name="fk_credit_cert_harvest_run"),
+        nullable=True,
+    )
