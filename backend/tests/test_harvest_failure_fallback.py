@@ -4,7 +4,12 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.db.models import CreditCompany, CreditCompanyBasicData, ScoreSnapshot
+from app.db.models import (
+    CreditCompany,
+    CreditCompanyBasicData,
+    CreditCompanyCertification,
+    ScoreSnapshot,
+)
 from app.services.credit.harvester.harvest_task import run_harvest_for_company
 from tests._harvest_fakes import FakeHarvester, make_result
 
@@ -73,3 +78,53 @@ async def test_partial_failure_run_partial_succeeded(client, test_engine):
             select(CreditCompanyBasicData).where(CreditCompanyBasicData.company_id == cid)
         )).scalars().all()
         assert len(basic) == 1
+
+
+def _add_mock_cert(db, cid: int) -> None:
+    """模拟 Δ5 注册时落的 mock 占位证书。"""
+    db.add(CreditCompanyCertification(
+        company_id=cid, cert_type="system_general", cert_name="ISO 9001",
+        status="valid", data_source="mock",
+    ))
+
+
+async def test_qualification_missing_clears_stale_mock_certs(client, test_engine):
+    """回归:真实抓取 qualification=missing 时清掉 Δ5 mock 证书,不让残留充数评分。"""
+    SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
+    async with SessionLocal() as db:
+        cid = await _new_kh(db, "KHF3")
+        _add_mock_cert(db, cid)
+        await db.flush()
+        fake = FakeHarvester(
+            basic=make_result("ok", "public", FULL_BASIC),
+            finance=make_result("missing", "missing", {}),
+            legal=make_result("missing", "missing", {}),
+            qual=make_result("missing", "missing", {}),  # 真实查无资质
+        )
+        await run_harvest_for_company(db, cid, "manual", harvester=fake)
+        await db.commit()
+        certs = (await db.execute(
+            select(CreditCompanyCertification).where(CreditCompanyCertification.company_id == cid)
+        )).scalars().all()
+        assert len(certs) == 0  # mock 证书被清,真实查无 = 无证书
+
+
+async def test_qualification_failed_keeps_certs(client, test_engine):
+    """qualification=failed(抓取出错)时保留旧证书,不能凭一次失败断言无资质。"""
+    SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False, autoflush=False)
+    async with SessionLocal() as db:
+        cid = await _new_kh(db, "KHF4")
+        _add_mock_cert(db, cid)
+        await db.flush()
+        fake = FakeHarvester(
+            basic=make_result("ok", "public", FULL_BASIC),
+            finance=make_result("missing", "missing", {}),
+            legal=make_result("missing", "missing", {}),
+            qual=make_result("failed", "missing", {}, error="llm: down"),
+        )
+        await run_harvest_for_company(db, cid, "manual", harvester=fake)
+        await db.commit()
+        certs = (await db.execute(
+            select(CreditCompanyCertification).where(CreditCompanyCertification.company_id == cid)
+        )).scalars().all()
+        assert len(certs) == 1  # 抓取失败,保留旧证书不动

@@ -239,17 +239,23 @@ async def _persist_certifications(
 ) -> None:
     """证书维度落库。
 
-    证书表是"多行全读"(不像其他三表读最新一条),为避免 mock/旧 harvest 证书与
-    本次 public 证书并存污染评分,status=ok/partial 时先清空该 company 现存证书再落新。
-    failed / missing 不动旧证书(保留 Δ5 占位)。
+    证书表是"多行全读"(不像其他三表读最新一条),按抓取结论分三档处理:
+    - failed:抓取技术性出错(Tavily/LLM 报错),数据未知 → 保留旧证书不动
+      (不能凭一次失败就断言"无资质")。
+    - missing:真实查无资质 → 清空该 company 现存证书(含 Δ5 mock 占位),不落新行,
+      维度2 评分按"无证书"走。**否则 Δ5 mock 证书会残留充数,污染真实评分。**
+    - ok/partial:清空旧证书后落本次 public 证书。
     """
-    if r.status in ("failed", "missing"):
+    if r.status == "failed":
         return
+    # missing / ok / partial:真实抓取已有结论,先清掉旧证书(Δ5 mock + 历史 harvest)
     await session.execute(
         delete(CreditCompanyCertification).where(
             CreditCompanyCertification.company_id == company_id
         )
     )
+    if r.status == "missing":
+        return  # 真实查无资质,清空即可,不落新行
     ex = r.extracted
     raw = _raw(r, run_id)
     for field, cert_name, cert_type in _ISO_CERT_MAP:

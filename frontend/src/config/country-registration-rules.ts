@@ -52,10 +52,11 @@ export const COUNTRIES = [
     localLangName: "ខ្មែរ",
     regNo: {
       label: "MOC 注册号",
-      hint: "10-12 位字母数字",
+      hint: "6-12 位数字",
       // TODO(REG-RULE):PRD v1.4 PM 文档基准,精确规则待业务深化
-      regex: /^[A-Z0-9]{10,12}$/,
-      transform: (v: string) => v.trim().toUpperCase().slice(0, 12),
+      // 柬埔寨 MOC 注册号为纯数字,原 ^[A-Z0-9]{10,12}$ 会拦掉真实号(纯数字/不足10位)
+      regex: /^[0-9]{6,12}$/,
+      transform: (v: string) => v.replace(/[^0-9]/g, "").slice(0, 12),
     },
   },
   {
