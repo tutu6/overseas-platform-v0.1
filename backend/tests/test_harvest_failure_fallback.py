@@ -70,9 +70,9 @@ async def test_partial_failure_run_partial_succeeded(client, test_engine):
         await db.commit()
 
         assert run.status == "partial_succeeded"
-        assert run.dimensions_status["basic"] == "ok"
-        assert run.dimensions_status["finance"] == "failed"
-        assert run.dimensions_status["legal"] == "missing"
+        assert run.dimensions_status["basic"]["status"] == "ok"
+        assert run.dimensions_status["finance"]["status"] == "failed"
+        assert run.dimensions_status["legal"]["status"] == "missing"
         # basic 落库,finance 失败不落
         basic = (await db.execute(
             select(CreditCompanyBasicData).where(CreditCompanyBasicData.company_id == cid)

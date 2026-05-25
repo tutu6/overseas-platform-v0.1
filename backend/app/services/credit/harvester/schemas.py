@@ -8,10 +8,23 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class FieldEvidenceSchema(BaseModel):
+    """LLM 输出的字段级证据(v0.3 对象形态)。
+
+    source_url 不由 LLM 输出、由后处理按 source_index 反查填充,
+    故此 Schema 只约束 LLM 输入侧(quote + source_index)。
+    """
+    quote: str | None = None
+    source_index: int | None = None
+
+
 class _ExtractedBase(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    evidence: dict[str, str | None] = Field(default_factory=dict, alias="_evidence")
+    # v0.3:evidence 从 {field: "quote 字符串"} 升级为 {field: {quote, source_index}}
+    evidence: dict[str, FieldEvidenceSchema | None] = Field(
+        default_factory=dict, alias="_evidence"
+    )
     confidence: str | None = Field(default=None, alias="_confidence")
     notes: str | None = Field(default=None, alias="_notes")
 

@@ -69,6 +69,8 @@ def _build_harvester() -> PublicWebHarvester:
         max_results=settings.TAVILY_MAX_RESULTS_PER_QUERY,
         llm_timeout_seconds=settings.CREDIT_HARVEST_LLM_TIMEOUT_SECONDS,
         llm_retry=settings.CREDIT_HARVEST_LLM_RETRY,
+        fuzzy_threshold=settings.CREDIT_HARVEST_EVIDENCE_FUZZY_THRESHOLD,
+        whitelist_fallback_threshold=settings.CREDIT_HARVEST_WHITELIST_FALLBACK_THRESHOLD,
     )
 
 
@@ -91,19 +93,20 @@ def _to_decimal(v: Any) -> Decimal | None:
 
 
 def _raw(r: HarvestResult, run_id: int) -> dict[str, Any]:
-    """落库 raw_data 结构(§4.3)。"""
+    """落库 raw_data 结构(v0.3:evidence 为对象 {quote,source_index,source_url}+queries)。"""
     return {
         "llm_response": r.raw_llm_response,
-        "evidence": r.evidence,
+        "evidence": {k: v.model_dump() for k, v in r.evidence.items()},
         "confidence": r.confidence,
-        "tavily_results": r.tavily_results,
+        "queries": r.queries,
+        "tavily_results": [{"index": i, **t} for i, t in enumerate(r.tavily_results)],
         "harvest_run_id": run_id,
     }
 
 
-def _aggregate_status(dim_status: dict[str, str]) -> str:
-    """4 维度结果汇总成 run.status(§4.6)。"""
-    vals = list(dim_status.values())
+def _aggregate_status(dim_status: dict[str, dict[str, Any]]) -> str:
+    """4 维度结果汇总成 run.status(§4.6)。dim_status 值为 v0.3 详情对象。"""
+    vals = [d["status"] for d in dim_status.values()]
     if vals and all(v == "failed" for v in vals):
         return HarvestRunStatus.FAILED
     if vals and all(v == "ok" for v in vals):
@@ -355,14 +358,21 @@ async def run_harvest_for_company(
     legal_r = await h.harvest_legal(name, cc, regno)
     qual_r = (await h.harvest_qualifications(name, cc, regno))[0]
 
-    dim_status: dict[str, str] = {}
+    dim_status: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
     total_tavily = total_llm = 0
     for dim, res in [
         ("basic", basic_r), ("finance", finance_r),
         ("legal", legal_r), ("qualification", qual_r),
     ]:
-        dim_status[dim] = res.status
+        # v0.3:dimensions_status 从字符串扩展为详情对象,便于排查召回质量
+        dim_status[dim] = {
+            "status": res.status,
+            "queries": res.queries,
+            "tavily_results_count": len(res.tavily_results),
+            "extracted_fields_count": sum(1 for v in res.extracted.values() if v is not None),
+            "missing_fields": [k for k, v in res.extracted.items() if v is None],
+        }
         total_tavily += res.tavily_calls
         total_llm += res.llm_calls
         if res.error:
