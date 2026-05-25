@@ -47,3 +47,9 @@ class CreditCompanyFinanceData(Base, TimestampMixin):
     raw_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     data_source: Mapped[str] = mapped_column(String(20), nullable=False)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Δ7:追溯抓取批次
+    harvest_run_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("credit_data_harvest_run.id", name="fk_credit_finance_harvest_run"),
+        nullable=True,
+    )

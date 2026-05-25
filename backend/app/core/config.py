@@ -45,6 +45,19 @@ class Settings(BaseSettings):
     QWEN_CHAT_TEMPERATURE: float = 0.2
     QWEN_TIMEOUT_SECONDS: float = 30.0
 
+    # ---- Tavily 搜索 API(Δ7 柬埔寨公开数据源抓取)----
+    # 真实 key 绝不进 Git;本地 .env / ECS .env.production 注入
+    TAVILY_API_KEY: str = ""
+    TAVILY_API_URL: str = "https://api.tavily.com"
+    TAVILY_TIMEOUT_SECONDS: int = 15
+    TAVILY_MAX_RESULTS_PER_QUERY: int = 5
+
+    # ---- 抓取缓存与限速(Δ7)----
+    CREDIT_HARVEST_CACHE_TTL_HOURS: int = 24
+    CREDIT_HARVEST_TAVILY_CALLS_PER_HARVEST: int = 10  # 单家公司单次抓取 Tavily 调用上限
+    CREDIT_HARVEST_LLM_TIMEOUT_SECONDS: int = 30
+    CREDIT_HARVEST_LLM_RETRY: int = 1
+
     # CORS(逗号分隔,运行时拆为列表)
     CORS_ORIGINS_RAW: str = Field(
         default="http://localhost:3000", alias="CORS_ORIGINS"

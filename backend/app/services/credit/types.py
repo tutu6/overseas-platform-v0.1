@@ -27,6 +27,7 @@ class BasicData(BaseModel):
     status_text: str | None = None
     address: str | None = None
     website: str | None = None
+    raw_data: dict[str, Any] | None = None  # Δ7:抓取留存
     # 来源标记:mock / official / api / public / media / missing
     data_source: str = "mock"
     fetched_at: datetime | None = None

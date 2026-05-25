@@ -59,6 +59,36 @@ class QwenChatService(LLMService):
         content = resp.choices[0].message.content if resp.choices else None
         return (content or "").strip()
 
+    async def generate_json(
+        self,
+        prompt: str,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> str:
+        self._check_configured()
+        try:
+            # openai SDK 的 timeout 是客户端级,用 with_options 临时覆盖单次调用
+            client = (
+                self._client.with_options(timeout=timeout_seconds)
+                if timeout_seconds is not None
+                else self._client
+            )
+            resp = await client.chat.completions.create(
+                model=self._model,
+                temperature=0.0,
+                response_format={"type": "json_object"},
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except (APIConnectionError, APITimeoutError, AuthenticationError, APIError) as exc:
+            logger.warning("LLM generate_json 失败: %s", exc)
+            raise LLMUnavailableError(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("LLM generate_json 未知错误")
+            raise LLMUnavailableError(str(exc)) from exc
+
+        content = resp.choices[0].message.content if resp.choices else None
+        return (content or "").strip()
+
     async def stream_chat(
         self, messages: list[dict[str, str]]
     ) -> AsyncIterator[str]:

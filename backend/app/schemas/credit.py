@@ -137,6 +137,9 @@ class CompanyDetailOut(BaseModel):
     finance: FinanceDataOut | None = None
     legal: LegalDataOut | None = None
     certifications: list[CertificationOut] = Field(default_factory=list)
+    # Δ7:抓取/评分状态(前端骨架屏依赖);非 KH 公司恒为 ready
+    evaluation_status: str = "ready"  # pending / ready / failed
+    latest_harvest_run: dict[str, Any] | None = None
 
 
 # =============================================================================
