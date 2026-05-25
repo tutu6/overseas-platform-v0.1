@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.constants.country_registration import (
     COUNTRY_CODES,
+    COUNTRY_META,
     LANGUAGE_CODES,
     REGISTRATION_NO_MAX_LENGTH,
+    validate_registration_no,
 )
 from app.core.security import PASSWORD_RULE_MESSAGE, validate_password_strength
 
@@ -120,6 +122,14 @@ class SupplierRegisterIn(BaseModel):
         if v not in COUNTRY_CODES:
             raise ValueError(f"country_code 必须是 9 国之一:{','.join(COUNTRY_CODES)}")
         return v
+
+    @model_validator(mode="after")
+    def _check_registration_no_format(self) -> "SupplierRegisterIn":
+        # 后端兜底:按国别精确校验注册号格式(前端可绕过,后端必须兜底,与前端正则对齐)
+        if not validate_registration_no(self.country_code, self.registration_no):
+            hint = COUNTRY_META.get(self.country_code, {}).get("reg_no_hint", "格式不符")
+            raise ValueError(f"注册号格式不符,应为:{hint}")
+        return self
 
     @field_validator("language_preference")
     @classmethod

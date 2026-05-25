@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import re
+
 # 9 国 ISO 2 位 code(用于 schema 枚举校验)
 COUNTRY_CODES: tuple[str, ...] = (
     "CN",
@@ -48,8 +50,23 @@ LANGUAGE_CODES: tuple[str, ...] = (
     "zh", "en", "km", "ur", "ar", "id", "ms",
 )
 
-# 后端只做长度兜底,精确正则在前端(TODO(REG-RULE) 各国正则待补)
+# 后端长度兜底(所有国家)
 REGISTRATION_NO_MAX_LENGTH = 50
+
+# 各国注册号精确正则(后端兜底校验,与 frontend/src/config/country-registration-rules.ts 对齐)
+# 本期仅柬埔寨;其他国 TODO(REG-RULE) 逐步补
+REGISTRATION_NO_PATTERNS: dict[str, "re.Pattern[str]"] = {
+    "KH": re.compile(r"^[0-9]{6,12}$"),  # MOC 注册号 6-12 位数字
+}
+
+
+def validate_registration_no(country_code: str, registration_no: str) -> bool:
+    """按国别精确校验注册号格式;未配置正则的国家只走 schema 长度兜底,返回 True。
+
+    前端校验可被绕过(直接调 API),后端在此兜底,保证 (country, regno) 格式一致。
+    """
+    pattern = REGISTRATION_NO_PATTERNS.get(country_code)
+    return True if pattern is None else bool(pattern.match(registration_no))
 
 # 重复注册错误文案(前后端逐字一致,不暴露 owner / 公司名信息)
 DUPLICATE_REGISTRATION_ERROR_MESSAGE = (
