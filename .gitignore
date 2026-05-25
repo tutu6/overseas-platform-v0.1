@@ -41,6 +41,10 @@ legacy-demo.sql.gz
 *.swp
 *~
 
+# Office / WPS 临时锁文件(打开 xlsx/doc 时生成,内容是垃圾)
+~$*
+.~*
+
 # ---- 日志 ----
 *.log
 .claude/
