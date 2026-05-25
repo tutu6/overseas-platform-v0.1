@@ -69,26 +69,25 @@ class AISummaryGenerator:
             logger.warning("snapshot_id=%s 不存在,跳过 AI 评价生成", snapshot_id)
             return None
 
-        prompt_data = await self._build_prompt_data(session, snapshot)
-        prompt = PROMPT_TEMPLATE.format(
-            snapshot_json=json.dumps(prompt_data, ensure_ascii=False, indent=2)
-        )
-
         try:
-            text = await self._llm.generate(prompt)
+            prompt_data = await self._build_prompt_data(session, snapshot)
+            prompt = PROMPT_TEMPLATE.format(
+                snapshot_json=json.dumps(prompt_data, ensure_ascii=False, indent=2)
+            )
+            text = (await self._llm.generate(prompt)).strip()
+            if not text:
+                return None
+            # 回写
+            snapshot.ai_summary = text
+            snapshot.ai_summary_generated_at = _utcnow()
+            await session.flush()
+            return text
         except LLMUnavailableError as exc:
             logger.warning("AI 评价生成失败(snapshot=%s): %s", snapshot_id, exc)
             return None
-
-        text = text.strip()
-        if not text:
+        except Exception:  # noqa: BLE001 — AI 评价是纯降级功能,任何异常都返回 None 不外抛
+            logger.exception("AI 评价生成异常(snapshot=%s)", snapshot_id)
             return None
-
-        # 回写
-        snapshot.ai_summary = text
-        snapshot.ai_summary_generated_at = _utcnow()
-        await session.flush()
-        return text
 
     @staticmethod
     async def _build_prompt_data(

@@ -41,9 +41,10 @@ from app.services.credit.harvester.public_web_harvester import (
     HarvestResult,
     PublicWebHarvester,
 )
+from app.services.credit.ai_summary_generator import AISummaryGenerator
 from app.services.credit.harvester.tavily_client import TavilyClient
 from app.services.credit.scoring_engine import ScoringEngine
-from app.services.llm import QwenChatService
+from app.services.llm import LLMUnavailableError, QwenChatService
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +391,7 @@ async def run_harvest_for_company(
         else TriggerType.MANUAL_RECALC
     )
     engine = ScoringEngine(resolve_data_source(cc))
-    await engine.compute(
+    snapshot = await engine.compute(
         session=session,
         company_id=company_id,
         trigger_type=trigger_type,
@@ -398,6 +399,18 @@ async def run_harvest_for_company(
         operator_user_id=operator_user_id,
     )
     await session.flush()
+
+    # 7. AI 评价:在本后台任务内生成(harvest 本就是异步任务,不阻塞用户请求)。
+    #    这样详情接口无需再同步现算 ai_summary。失败不影响评分落库。
+    try:
+        await AISummaryGenerator(QwenChatService(settings)).generate_for_snapshot(
+            session, snapshot.id
+        )
+    except LLMUnavailableError as exc:
+        logger.info("AI 评价跳过(LLM 不可用)company=%s: %s", company_id, exc)
+    except Exception:  # noqa: BLE001 — AI 评价失败不阻断 harvest 主流程
+        logger.exception("AI 评价生成抛错 company=%s", company_id)
+
     logger.info(
         "harvest done company=%s run=%s status=%s dims=%s",
         company_id, run.id, run.status, dim_status,

@@ -236,18 +236,10 @@ async def get_company_detail(
         )
         return success(payload.model_dump(mode="json"))
 
-    # ai_summary 为空时同步生成(工单 Step 11)
-    if snapshot.ai_summary is None:
-        try:
-            generator = AISummaryGenerator(_llm_service())
-            await generator.generate_for_snapshot(db, snapshot.id)
-            await db.commit()
-            await db.refresh(snapshot)
-        except LLMUnavailableError as exc:
-            # 不阻断详情页渲染;前端会显示"AI 评价暂时不可用"
-            logger.warning("AI summary 生成失败 company_id=%s: %s", company_id, exc)
-        except Exception:  # noqa: BLE001
-            logger.exception("AI summary 生成抛错 company_id=%s", company_id)
+    # AI 评价**不在详情接口里同步生成**:LLM 慢/联网/可能失败,绝不阻塞页面渲染。
+    # 改由评分后台任务(registration_hook / harvest_task)异步生成并落库;
+    # 详情接口只读库,ai_summary 未就绪则返回 null,前端显示"AI 评价生成中"。
+    # 详见 CLAUDE.md「外部慢调用(LLM/网络)不得阻塞请求路径」。
 
     # 12 条 score_detail
     detail_stmt = (
