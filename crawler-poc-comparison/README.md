@@ -46,12 +46,15 @@ curl -X POST http://localhost:8004/api/poc/compare \
 
 ## 测试公司
 
-| 公司名 | MOC 注册号(参考) | 测试要点 |
-|---|---|---|
-| `KHALIBRE CO.,LTD` | 00002730 | OpenCorporates 有真实数据,Tavily 应能召回 |
-| `T.S SPORT (CAMBODIA) CO., LTD.` | 00052477 | 中型企业 |
-| `Kampot Cement` | (大企业) | 媒体覆盖高,司法舆情演示效果好 |
-| `Acleda Bank` | (大银行) | 媒体覆盖极高 |
+覆盖不同企业规模(规模差异会影响 Tavily / 爬虫两条路径的表现):1-2 家大企业 + 2-3 家中小企业。
+
+| 公司名 | 规模 | MOC 注册号 | 测试要点 |
+|---|---|---|---|
+| `Kampot Cement` | 大企业 | (无) | 媒体覆盖高,司法舆情演示效果好 |
+| `Acleda Bank` | 大企业 | (无) | 大银行,媒体覆盖极高 |
+| `KHALIBRE CO.,LTD` | 中小企业 | 00002730 | 中小企业,GLEIF 有 LEI 记录 |
+| `T.S SPORT (CAMBODIA) CO., LTD.` | 中小企业 | 00052477 | 中小企业 |
+| `TOP FORM (CAMBODIA) COMPANY LIMITED` | 中小企业 | 00015130 | 中小企业 |
 
 ## 已知限制
 
