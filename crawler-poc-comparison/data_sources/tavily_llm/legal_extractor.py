@@ -78,7 +78,7 @@ async def extract_legal_via_tavily_llm(company_name: str) -> LegalResult:
         ]
     except Exception as exc:  # noqa: BLE001
         return LegalResult(
-            source="tavily_llm", status="parse_failed", article_count=0,
+            source="tavily_llm", status="parse_error", article_count=0,
             negative_count=0, latest_published=None, articles=[],
             duration_ms=_ms(start), error_detail=str(exc)[:200],
         )
@@ -88,7 +88,7 @@ async def extract_legal_via_tavily_llm(company_name: str) -> LegalResult:
     latest = next((a.published_date for a in articles if a.published_date), None)
     result = LegalResult(
         source="tavily_llm",
-        status="success" if articles else "not_found",
+        status="ok" if articles else "no_match",
         article_count=len(articles),
         negative_count=neg,
         latest_published=latest,

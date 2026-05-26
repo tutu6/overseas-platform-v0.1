@@ -60,7 +60,7 @@ async def extract_basic_via_tavily_llm(company_name: str) -> BasicResult:
         fields = BasicFields(**{k: extracted.get(k) for k in BasicFields.model_fields})
     except Exception as exc:  # noqa: BLE001
         return BasicResult(
-            source="tavily_llm", status="parse_failed", fields=BasicFields(),
+            source="tavily_llm", status="parse_error", fields=BasicFields(),
             fields_filled=0, duration_ms=_ms(start),
             error_detail=str(exc)[:200], raw_snippet=raw[:500],
         )
@@ -68,7 +68,7 @@ async def extract_basic_via_tavily_llm(company_name: str) -> BasicResult:
     filled = sum(1 for v in fields.model_dump().values() if v is not None)
     result = BasicResult(
         source="tavily_llm",
-        status="success" if filled > 0 else "not_found",
+        status="ok" if filled > 0 else "no_match",
         fields=fields,
         fields_filled=filled,
         source_url=results[0].url if results else None,

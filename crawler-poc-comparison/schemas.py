@@ -22,7 +22,7 @@ class BasicFields(BaseModel):
 class BasicResult(BaseModel):
     """工商基础单源结果。"""
     source: str  # tavily_llm / crawler_moc
-    # success / partial / blocked / not_found / parse_failed / timeout / error
+    # ok / access_restricted / no_match / parse_error / timeout / error
     status: str
     fields: BasicFields
     fields_filled: int
@@ -48,6 +48,7 @@ class LegalArticle(BaseModel):
 class LegalResult(BaseModel):
     """司法舆情单源结果。"""
     source: str  # tavily_llm / crawler_media
+    # ok / access_restricted / no_match / parse_error / timeout / error
     status: str
     article_count: int
     negative_count: int
@@ -60,10 +61,25 @@ class LegalResult(BaseModel):
 
 # ---------- 顶层响应 ----------
 
+class OverlapAnalysis(BaseModel):
+    """司法舆情两路召回 URL 重合度分析(v1.1)。"""
+    tavily_total: int
+    crawler_total: int
+    overlap_count: int
+    overlap_urls: list[str]
+    tavily_only_urls: list[str]
+    crawler_only_urls: list[str]
+
+
+class LegalResultWithOverlap(BaseModel):
+    legal_tavily: LegalResult
+    legal_crawler: LegalResult
+    overlap: OverlapAnalysis
+
+
 class ComparisonResponse(BaseModel):
     """页面查询的顶层响应(4 路并发结果)。"""
     company_name: str
     basic_tavily: BasicResult
     basic_crawler: BasicResult
-    legal_tavily: LegalResult
-    legal_crawler: LegalResult
+    legal: LegalResultWithOverlap  # v1.1:两路 + 重合度(替代原 legal_tavily/legal_crawler)

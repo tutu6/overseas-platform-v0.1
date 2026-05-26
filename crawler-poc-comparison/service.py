@@ -16,6 +16,8 @@ from schemas import (
     BasicResult,
     ComparisonResponse,
     LegalResult,
+    LegalResultWithOverlap,
+    OverlapAnalysis,
 )
 
 
@@ -44,13 +46,13 @@ async def crawl_legal_via_media(company_name: str) -> LegalResult:
     neg = sum(1 for a in articles if a.is_negative)
     latest = next((a.published_date for a in articles if a.published_date), None)
     if articles:
-        status = "success"
+        status = "ok"
     elif blocked:
-        status = "blocked"
+        status = "access_restricted"
     elif errors:
         status = "error"
     else:
-        status = "not_found"
+        status = "no_match"
     return LegalResult(
         source="crawler_media", status=status, article_count=len(articles),
         negative_count=neg, latest_published=latest, articles=articles,
@@ -74,6 +76,20 @@ def _wrap_legal(res, source: str) -> LegalResult:
     return res
 
 
+def calc_overlap(tavily_articles, crawler_articles) -> OverlapAnalysis:
+    """两路召回 URL 重合度(v1.1)。"""
+    t = {a.url for a in tavily_articles if a.url}
+    c = {a.url for a in crawler_articles if a.url}
+    return OverlapAnalysis(
+        tavily_total=len(t),
+        crawler_total=len(c),
+        overlap_count=len(t & c),
+        overlap_urls=sorted(t & c),
+        tavily_only_urls=sorted(t - c),
+        crawler_only_urls=sorted(c - t),
+    )
+
+
 async def compare_company(company_name: str, force_refresh: bool = False) -> ComparisonResponse:
     """4 路并发对照。"""
     if force_refresh:
@@ -86,10 +102,15 @@ async def compare_company(company_name: str, force_refresh: bool = False) -> Com
         crawl_legal_via_media(company_name),
         return_exceptions=True,
     )
+    legal_t = _wrap_legal(lt, "tavily_llm")
+    legal_c = _wrap_legal(lc, "crawler_media")
     return ComparisonResponse(
         company_name=company_name,
         basic_tavily=_wrap_basic(bt, "tavily_llm"),
         basic_crawler=_wrap_basic(bc, "crawler_moc"),
-        legal_tavily=_wrap_legal(lt, "tavily_llm"),
-        legal_crawler=_wrap_legal(lc, "crawler_media"),
+        legal=LegalResultWithOverlap(
+            legal_tavily=legal_t,
+            legal_crawler=legal_c,
+            overlap=calc_overlap(legal_t.articles, legal_c.articles),
+        ),
     )

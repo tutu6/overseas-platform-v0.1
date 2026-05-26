@@ -32,6 +32,8 @@ class SimpleCache:
         return data.get("payload")
 
     def set(self, namespace: str, company_name: str, payload: dict) -> None:
+        # 确保目录存在(防目录被外部删除后 singleton 不重建)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         path = self._key(namespace, company_name)
         path.write_text(json.dumps({"ts": time.time(), "payload": payload}, default=str))
 

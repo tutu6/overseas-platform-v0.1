@@ -26,7 +26,7 @@ class MocCambodiaCrawler:
             html = await fetch_html(url, timeout=20)
         except CrawlerError as exc:
             msg = str(exc)
-            status = "blocked" if ("403" in msg or "401" in msg) else (
+            status = "access_restricted" if ("403" in msg or "401" in msg) else (
                 "timeout" if "timed out" in msg.lower() or "timeout" in msg.lower() else "error"
             )
             return BasicResult(
@@ -41,7 +41,7 @@ class MocCambodiaCrawler:
         lowered = html.lower()
         if any(k in lowered for k in ("login", "sign in", "log in")) and "password" in lowered:
             return BasicResult(
-                source="crawler_moc", status="blocked", fields=BasicFields(),
+                source="crawler_moc", status="access_restricted", fields=BasicFields(),
                 fields_filled=0, source_url=url,
                 duration_ms=int((time.time() - start) * 1000),
                 error_detail="疑似重定向到登录页(页面含登录表单)",
@@ -51,7 +51,7 @@ class MocCambodiaCrawler:
         body_text = soup.get_text(strip=True)
         if len(body_text) < 200 and soup.select_one("#root, #app, [ng-app]"):
             return BasicResult(
-                source="crawler_moc", status="blocked", fields=BasicFields(),
+                source="crawler_moc", status="access_restricted", fields=BasicFields(),
                 fields_filled=0, source_url=url,
                 duration_ms=int((time.time() - start) * 1000),
                 error_detail="疑似 JS 渲染 SPA(需 Playwright,PoC 不切)",
@@ -63,7 +63,7 @@ class MocCambodiaCrawler:
         filled = sum(1 for v in fields.model_dump().values() if v is not None)
         return BasicResult(
             source="crawler_moc",
-            status="not_found",  # 未能从公开页面解析出结构化字段
+            status="no_match",  # 未能从公开页面解析出结构化字段
             fields=fields,
             fields_filled=filled,
             source_url=url,
