@@ -12,6 +12,8 @@ basic:
 
 qualification:
   - mpwt.gov.kh                       # 柬埔寨 ISC 来源(PRD §Δ9)
+                                      # 国家级地理封禁(SonicWall GEO-IP),自建爬虫从中国/美国
+                                      # 均不可达;依赖 Tavily 全球索引能力,保留为白名单源
   - iso.org                           # 国际标准目录
 
 finance:
