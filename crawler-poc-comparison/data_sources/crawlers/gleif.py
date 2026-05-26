@@ -5,6 +5,7 @@ import time
 
 import httpx
 
+from data_sources.crawlers.base import name_match
 from schemas import BasicFields, BasicResult
 
 
@@ -50,6 +51,15 @@ class GleifApiCrawler:
             )
         entity = (records[0].get("attributes") or {}).get("entity") or {}
         name = (entity.get("legalName") or {}).get("name")
+        # 命中校验:GLEIF filter 是模糊匹配,可能返回不相关公司(查 T.S SPORT 命中 F.U.G.I GOLD)。
+        # 返回名必须与查询名近似,否则视为未命中,防张冠李戴。
+        if not name or not name_match(company_name, name):
+            return BasicResult(
+                source=self.SOURCE_NAME, status="no_match",
+                fields=BasicFields(country_region="Cambodia"), fields_filled=1,
+                source_url=url, duration_ms=ms(),
+                error_detail=(f"GLEIF 返回 '{name}' 与查询不匹配,判未命中" if name else None),
+            )
         fields = BasicFields(company_full_name=name, country_region="Cambodia")
         filled = sum(1 for v in fields.model_dump().values() if v is not None)
         return BasicResult(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from difflib import SequenceMatcher
 
 import httpx
 
@@ -74,3 +75,29 @@ def abs_url(base_url: str, href: str) -> str:
     if href.startswith("http"):
         return href
     return base_url.rstrip("/") + ("" if href.startswith("/") else "/") + href
+
+
+_NAME_SUFFIXES = (
+    "coltd", "company", "limited", "ltd", "plc", "inc",
+    "corporation", "cambodia", "co",
+)
+
+
+def _normalize_name(s: str) -> str:
+    """归一化公司名:转小写、去标点空格、剥离常见后缀,便于跨源比对。"""
+    s = re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    for suf in _NAME_SUFFIXES:
+        s = s.replace(suf, "")
+    return s
+
+
+def name_match(query: str, candidate: str, threshold: float = 0.6) -> bool:
+    """命中校验:候选名是否与查询名近似。
+
+    模糊搜索源(GLEIF filter、Wikipedia 标题)会返回"沾边但不是同一家"的结果,
+    直接采信会张冠李戴。归一化后要求互为子串、或相似度 ≥ threshold 才算命中。
+    """
+    q, c = _normalize_name(query), _normalize_name(candidate)
+    if not q or not c:
+        return False
+    return q in c or c in q or SequenceMatcher(None, q, c).ratio() >= threshold
