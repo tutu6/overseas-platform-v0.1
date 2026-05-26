@@ -16,6 +16,7 @@ from schemas import BasicFields, BasicResult
 
 
 class MocCambodiaCrawler:
+    SOURCE_NAME = "moc.gov.kh"
     BASE_URL = "https://www.businessregistration.moc.gov.kh"
 
     async def fetch(self, company_name: str) -> BasicResult:
@@ -26,12 +27,13 @@ class MocCambodiaCrawler:
             html = await fetch_html(url, timeout=20)
         except CrawlerError as exc:
             msg = str(exc)
-            status = "access_restricted" if ("403" in msg or "401" in msg) else (
-                "timeout" if "timed out" in msg.lower() or "timeout" in msg.lower() else "error"
+            code = exc.status_code
+            status = "access_restricted" if code in (401, 403) else (
+                "timeout" if "timeout" in msg.lower() else "error"
             )
             return BasicResult(
                 source="crawler_moc", status=status, fields=BasicFields(),
-                fields_filled=0, source_url=self.BASE_URL,
+                fields_filled=0, source_url=self.BASE_URL, http_status_code=code,
                 duration_ms=int((time.time() - start) * 1000),
                 error_detail=msg[:300],
             )

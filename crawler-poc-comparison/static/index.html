@@ -41,6 +41,16 @@
     .url-list { margin-top: 12px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; max-height: 300px; overflow-y: auto; max-width: 960px; }
     .url-item { padding: 4px 0; font-size: 13px; word-break: break-all; }
     .empty { color: #6b7280; font-style: italic; text-align: center; padding: 20px; }
+    /* v1.2 爬虫降级链尝试轨迹 */
+    .attempt-chain { margin: 12px 0; padding: 8px 12px; background: #f9fafb; border-left: 3px solid #d1d5db; max-width: 980px; }
+    .attempt-chain h5 { margin: 0 0 8px; font-size: 13px; color: #6b7280; }
+    .attempt-list { list-style: none; padding: 0; margin: 0; }
+    .attempt-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+    .attempt-icon { width: 16px; text-align: center; color: #6b7280; }
+    .attempt-source { font-family: monospace; color: #374151; }
+    .attempt-status { color: #6b7280; }
+    .attempt-duration { margin-left: auto; color: #9ca3af; font-size: 12px; }
+    .hit-source { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e5e7eb; font-size: 13px; }
     #status { margin: 10px 0; color: #666; }
     details.meta { margin-top: 18px; max-width: 980px; font-size: 12px; }
     details.meta pre { background: #f6f6f6; padding: 10px; overflow-x: auto; max-height: 360px; }
@@ -101,7 +111,7 @@
       <table>
         <tr><th class="col-field">字段</th>
             <th>Tavily + LLM ${cacheTag(t)}</th>
-            <th>爬虫(MOC 官网) ${cacheTag(c)}</th></tr>
+            <th>爬虫(降级链) ${cacheTag(c)}</th></tr>
         ${rows}
         <tr><td class="col-field">填充率</td><td>${t.fields_filled}/7</td><td>${c.fields_filled}/7</td></tr>
         <tr><td class="col-field">耗时</td><td>${t.duration_ms}ms</td><td>${c.duration_ms}ms</td></tr>
@@ -109,11 +119,30 @@
             <td>${statusHtml(t.status)}${t.error_detail ? ' · ' + t.error_detail : ''}${rawRow(t)}</td>
             <td>${statusHtml(c.status)}${c.error_detail ? ' · ' + c.error_detail : ''}${rawRow(c)}</td></tr>
         <tr><td class="col-field">来源</td><td>${cell(t.source_url)}</td><td>${cell(c.source_url)}</td></tr>
-      </table>`;
+      </table>
+      ${renderChain(c)}`;
     }
     function cacheTag(r) {
       if (r.status === 'ok') return r.cache_hit ? '· 缓存命中' : '· 实时';
       return '';
+    }
+    function renderChain(c) {
+      if (!c.attempts || c.attempts.length === 0) return '';
+      const items = c.attempts.map(a => {
+        const [icon, label] = STATUS_MAP[a.status] || ['△', a.status];
+        const code = a.http_status_code ? ' (' + a.http_status_code + ')' : '';
+        return `<li class="attempt-item">
+          <span class="attempt-icon">${icon}</span>
+          <span class="attempt-source">${a.source}</span>
+          <span class="attempt-status">─ ${label}${code}</span>
+          <span class="attempt-duration">${a.duration_ms}ms</span>
+        </li>`;
+      }).join('');
+      return `<div class="attempt-chain">
+        <h5>爬虫降级链路尝试(MOC → OpenCorporates → Wikipedia → GLEIF)</h5>
+        <ul class="attempt-list">${items}</ul>
+        <div class="hit-source">最终数据来自:<strong>${c.hit_source || '所有源均未命中'}</strong></div>
+      </div>`;
     }
 
     function renderArticles(r) {

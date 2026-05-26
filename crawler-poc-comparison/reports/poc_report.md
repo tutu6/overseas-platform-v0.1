@@ -31,15 +31,50 @@
 - 数据来源:OpenDevelopment Mekong、OpenCorporates 镜像等公开聚合站。
 - 运行特征:单次 2.8~4.5s,`search_depth=basic` 摘要短是填充率偏低主因。
 
-### 3.2 路径 B:自建爬虫(MOC 官网)观察
-- 调用结果:三家均 access_restricted。
-- 字段填充:0 / 7(未取得 HTML)。
-- 站点访问特征:`businessregistration.moc.gov.kh` 直接 HTTP 403,首请求即拒(WAF / 需登录)。
-- 运行特征:快速失败(<1s),无重试无绕过。
+### 3.2 路径 B:自建爬虫(降级链)观察
+
+v1.2 工商爬虫升级为 4 级降级链:**MOC → OpenCorporates → Wikipedia → GLEIF API,命中即停**。
+
+#### 3.2.1 降级链各源实测表现(3 家公司)
+
+| 源 | ok | access_restricted | no_match | 说明 |
+|---|---|---|---|---|
+| moc.gov.kh | 0 | 3 | 0 | 全 HTTP 403,首请求即拒 |
+| opencorporates.com | 0 | 0 | 3 | 可连但搜索结果未解析出公司(反爬返回页 / DOM 未适配 / 无 KH 数据) |
+| en.wikipedia.org | 0 | 3 | 0 | 该 UA 下 HTTP 403(无对应词条 / 反爬) |
+| api.gleif.org | 1 | 0 | 2 | REST API 可调;KHALIBRE 有 LEI 记录命中,另两家无 |
+
+#### 3.2.2 降级链整体效果
+
+- 整体命中率:**1/3**(KHALIBRE 在第 4 级 GLEIF 命中;Kampot Cement / Acleda Bank 全链未命中)
+- 命中层级:第 4 级(GLEIF)
+- 平均累计耗时:约 2.5~3.3s(4 级串行)
+- 字段填充(命中时):GLEIF 仅 **2/7**(企业全称 + 国别),无注册号/成立日期/法人等
+
+#### 3.2.3 各源字段覆盖能力(实测)
+
+| 字段 | moc | opencorp | wiki | gleif |
+|---|---|---|---|---|
+| company_full_name | (403) | (未解析) | (403) | ✓ |
+| country_region | — | — | — | ✓ |
+| registration_no | — | — | — | ✗(LEI ≠ 注册号) |
+| established_date / 其他 | — | — | — | ✗ |
+
+实测中只有 GLEIF 真正产出字段,且仅 2/7。
+
+#### 3.2.4 站点访问特征
+
+- `moc.gov.kh`:HTTP 403,WAF / 需登录,纯爬不可行
+- `opencorporates.com`:可连但搜索页未解析出结果(疑反爬返回页 / 详情需登录)
+- `en.wikipedia.org`:该请求 403(UA / 词条匹配),未取得 infobox
+- `api.gleif.org`:✅ 唯一稳定可调(REST JSON),但 LEI 库对柬埔寨中小企业覆盖低、字段少
 
 ### 3.3 两条路径对比
-- 字段覆盖:路径 A 有部分字段,路径 B 为 0。
-- 适用场景:工商基础在当前调用方式下,只有路径 A 能产出数据;路径 B 需要更重的访问手段(浏览器渲染 / 授权)才可能可用,本期未引入。
+
+- **字段覆盖**:Tavily+LLM 1~3/7(全称/国别/注册号);爬虫降级链整体 1/3 公司命中(仅 GLEIF),命中也只 2/7、且无注册号。
+- **数据形态**:Tavily 走网页摘要 → LLM 归纳;爬虫降级链中只有 GLEIF(REST JSON)能结构化产出,HTML 类源(MOC/OpenCorp/Wiki)全军覆没。
+- **命中路径**:降级链证明"多源兜底"有一定价值(KHALIBRE 靠 GLEIF 救回),但救回的数据质量低(2/7)。
+- **适用场景**:工商基础**仍以 Tavily+LLM 为主**;GLEIF 可作为"有 LEI 的大中型企业"的结构化补充源;HTML 爬虫(MOC/OpenCorp/Wiki)在柬埔寨不可行。
 
 ## 4. 司法舆情维度
 

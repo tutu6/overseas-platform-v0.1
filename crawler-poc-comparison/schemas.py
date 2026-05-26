@@ -19,9 +19,18 @@ class BasicFields(BaseModel):
     registered_capital: str | None = None
 
 
+class AttemptRecord(BaseModel):
+    """爬虫降级链中单次尝试的记录(v1.2)。"""
+    source: str
+    status: str  # ok / access_restricted / no_match / parse_error / timeout / error
+    duration_ms: int
+    http_status_code: int | None = None
+    error_detail: str | None = None
+
+
 class BasicResult(BaseModel):
     """工商基础单源结果。"""
-    source: str  # tavily_llm / crawler_moc
+    source: str  # tavily_llm / crawler_chain(v1.2 爬虫侧固定为降级链)
     # ok / access_restricted / no_match / parse_error / timeout / error
     status: str
     fields: BasicFields
@@ -32,6 +41,9 @@ class BasicResult(BaseModel):
     cache_hit: bool = False
     error_detail: str | None = None
     raw_snippet: str | None = None  # 失败现场(HTML 片段或 LLM 应答前 500 字)
+    http_status_code: int | None = None  # v1.2:单源 HTTP 状态码
+    hit_source: str | None = None        # v1.2:降级链实际命中的源(Tavily 侧 None)
+    attempts: list[AttemptRecord] = []   # v1.2:降级链尝试轨迹(Tavily 侧空)
 
 
 # ---------- 司法舆情 ----------

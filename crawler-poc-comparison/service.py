@@ -6,12 +6,16 @@ import time
 from datetime import date
 
 from cache import get_cache
+from data_sources.crawlers.gleif import GleifApiCrawler
 from data_sources.crawlers.khmer_times import KhmerTimesCrawler
 from data_sources.crawlers.moc_cambodia import MocCambodiaCrawler
+from data_sources.crawlers.opencorporates import OpenCorporatesCrawler
 from data_sources.crawlers.phnom_penh_post import PhnomPenhPostCrawler
+from data_sources.crawlers.wikipedia import WikipediaCrawler
 from data_sources.tavily_llm.basic_extractor import extract_basic_via_tavily_llm
 from data_sources.tavily_llm.legal_extractor import extract_legal_via_tavily_llm
 from schemas import (
+    AttemptRecord,
     BasicFields,
     BasicResult,
     ComparisonResponse,
@@ -21,8 +25,43 @@ from schemas import (
 )
 
 
-async def crawl_basic_via_moc(company_name: str) -> BasicResult:
-    return await MocCambodiaCrawler().fetch(company_name)
+async def crawl_basic_with_fallback(company_name: str) -> BasicResult:
+    """工商基础爬虫降级链:MOC → OpenCorporates → Wikipedia → GLEIF,命中即停。"""
+    attempts: list[AttemptRecord] = []
+    crawlers = [
+        MocCambodiaCrawler(), OpenCorporatesCrawler(),
+        WikipediaCrawler(), GleifApiCrawler(),
+    ]
+    for crawler in crawlers:
+        start = time.time()
+        try:
+            result = await crawler.fetch(company_name)
+        except Exception as exc:  # noqa: BLE001 — 单源异常不阻断降级链
+            attempts.append(AttemptRecord(
+                source=crawler.SOURCE_NAME, status="error",
+                duration_ms=int((time.time() - start) * 1000), error_detail=str(exc)[:200],
+            ))
+            continue
+        attempts.append(AttemptRecord(
+            source=crawler.SOURCE_NAME, status=result.status,
+            duration_ms=result.duration_ms, http_status_code=result.http_status_code,
+            error_detail=result.error_detail,
+        ))
+        if result.status == "ok":
+            return BasicResult(
+                source="crawler_chain", status="ok", fields=result.fields,
+                fields_filled=result.fields_filled, source_url=result.source_url,
+                hit_source=crawler.SOURCE_NAME, attempts=attempts,
+                duration_ms=sum(a.duration_ms for a in attempts),
+            )
+    # 所有源都未命中:全 no_match → no_match;否则有访问受限 → access_restricted
+    all_clean = all(a.status in ("no_match", "ok") for a in attempts)
+    return BasicResult(
+        source="crawler_chain",
+        status="no_match" if all_clean else "access_restricted",
+        fields=BasicFields(), fields_filled=0, hit_source=None, attempts=attempts,
+        duration_ms=sum(a.duration_ms for a in attempts),
+    )
 
 
 async def crawl_legal_via_media(company_name: str) -> LegalResult:
@@ -97,7 +136,7 @@ async def compare_company(company_name: str, force_refresh: bool = False) -> Com
 
     bt, bc, lt, lc = await asyncio.gather(
         extract_basic_via_tavily_llm(company_name),
-        crawl_basic_via_moc(company_name),
+        crawl_basic_with_fallback(company_name),
         extract_legal_via_tavily_llm(company_name),
         crawl_legal_via_media(company_name),
         return_exceptions=True,

@@ -25,18 +25,22 @@ NEGATIVE_KEYWORDS_EN = [
 
 
 class CrawlerError(Exception):
-    """爬虫失败(HTTP 错误 / 超时 / DOM 结构变化)。"""
+    """爬虫失败(HTTP 错误 / 超时 / DOM 结构变化)。status_code 便于降级链记录每级 HTTP 码。"""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 async def fetch_html(url: str, timeout: int = 20) -> str:
-    """抓取页面 HTML。4xx/5xx/网络错误 → CrawlerError(含状态码,便于判 blocked)。"""
+    """抓取页面 HTML。4xx/5xx/网络错误 → CrawlerError(带状态码)。"""
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             resp = await client.get(url, headers=_HEADERS)
             resp.raise_for_status()
             return resp.text
     except httpx.HTTPStatusError as exc:
-        raise CrawlerError(f"HTTP {exc.response.status_code}") from exc
+        raise CrawlerError(f"HTTP {exc.response.status_code}", exc.response.status_code) from exc
     except httpx.HTTPError as exc:
         raise CrawlerError(f"请求失败: {exc}") from exc
 
