@@ -35,46 +35,52 @@
 
 v1.2 工商爬虫升级为 4 级降级链:**MOC → OpenCorporates → Wikipedia → GLEIF API,命中即停**。
 
-#### 3.2.1 降级链各源实测表现(3 家公司)
+#### 3.2.1 降级链各源实测表现(5 家公司,按规模)
 
-| 源 | ok | access_restricted | no_match | 说明 |
-|---|---|---|---|---|
-| moc.gov.kh | 0 | 3 | 0 | 全 HTTP 403,首请求即拒 |
-| opencorporates.com | 0 | 0 | 3 | 可连但搜索结果未解析出公司(反爬返回页 / DOM 未适配 / 无 KH 数据) |
-| en.wikipedia.org | 0 | 3 | 0 | 该 UA 下 HTTP 403(无对应词条 / 反爬) |
-| api.gleif.org | 1 | 0 | 2 | REST API 可调;KHALIBRE 有 LEI 记录命中,另两家无 |
+> 命中即停:大企业在第 3 级 Wikipedia 命中后不再走 GLEIF,故 GLEIF 仅对 3 家中小企业触发。
+
+| 源 | 触发次数 | ok | access_restricted | no_match | 说明 |
+|---|---|---|---|---|---|
+| moc.gov.kh | 5 | 0 | 5 | 0 | 全 HTTP 403,首请求即拒 |
+| opencorporates.com | 5 | 0 | 0 | 5 | 可连但搜索结果未解析出公司(反爬返回页 / DOM 未适配 / 无 KH 数据) |
+| en.wikipedia.org | 5 | 2 | 0 | 3 | REST API:大企业(ACLEDA/Kampot)有词条命中;中小企业 404 无词条 |
+| api.gleif.org | 3 | 0 | 0 | 3 | 仅中小企业触发;模糊匹配返回 F.U.G.I GOLD,经命中校验拒绝,无真命中 |
 
 #### 3.2.2 降级链整体效果
 
-- 整体命中率:**1/3**(KHALIBRE 在第 4 级 GLEIF 命中;Kampot Cement / Acleda Bank 全链未命中)
-- 命中层级:第 4 级(GLEIF)
-- 平均累计耗时:约 2.5~3.3s(4 级串行)
-- 字段填充(命中时):GLEIF 仅 **2/7**(企业全称 + 国别),无注册号/成立日期/法人等
+- 整体命中率:**2/5** —— 大企业 **2/2**(均在第 3 级 Wikipedia 命中),中小企业 **0/3**(无词条 + GLEIF 无真命中)
+- 命中层级:第 3 级(Wikipedia REST summary API)
+- 字段填充(命中时):Wikipedia summary 仅 **2/7**(企业全称 + 国别),无注册号/成立日期/法人(summary 不含 infobox)
+- 规模差异显著:**企业越大、越知名,公开数据源覆盖越好**;中小企业在所有公开源都查不到
 
 #### 3.2.3 各源字段覆盖能力(实测)
 
-| 字段 | moc | opencorp | wiki | gleif |
+| 字段 | moc | opencorp | wiki(REST) | gleif |
 |---|---|---|---|---|
-| company_full_name | (403) | (未解析) | (403) | ✓ |
-| country_region | — | — | — | ✓ |
-| registration_no | — | — | — | ✗(LEI ≠ 注册号) |
-| established_date / 其他 | — | — | — | ✗ |
+| company_full_name | (403) | (未解析) | ✓(有词条时) | (无真命中) |
+| country_region | — | — | ✓ | — |
+| registration_no / 成立日期 / 其他 | — | — | ✗(summary 无 infobox) | — |
 
-实测中只有 GLEIF 真正产出字段,且仅 2/7。
+实测中只有 Wikipedia(大企业)真正产出字段,且仅 2/7。
 
 #### 3.2.4 站点访问特征
 
 - `moc.gov.kh`:HTTP 403,WAF / 需登录,纯爬不可行
 - `opencorporates.com`:可连但搜索页未解析出结果(疑反爬返回页 / 详情需登录)
-- `en.wikipedia.org`:该请求 403(UA / 词条匹配),未取得 infobox
-- `api.gleif.org`:✅ 唯一稳定可调(REST JSON),但 LEI 库对柬埔寨中小企业覆盖低、字段少
+- `en.wikipedia.org`:REST summary API 可用,但须遵守 Wikimedia UA 策略(UA 带 URL+email 联系方式),否则 403;仅大企业有词条
+- `api.gleif.org`:REST JSON 可调,但 `filter[legalName]` 是模糊匹配会返回不相关公司,**必须做命中校验**;柬埔寨中小企业基本无 LEI 记录
+
+#### 3.2.5 两个关键校验教训(v1.2 修复)
+
+- **Wikipedia 403 ≠ 反爬不可破**:是 UA 不合规;换合规 UA 即通。盲目归因"被封"会漏掉可用源。
+- **GLEIF 命中必须验名**:模糊搜索源返回"沾边"结果,直接采信会张冠李戴(查 T.S SPORT 命中 F.U.G.I GOLD)。**凡模糊匹配源,命中后都要校验返回主体 == 查询主体**。
 
 ### 3.3 两条路径对比
 
-- **字段覆盖**:Tavily+LLM 1~3/7(全称/国别/注册号);爬虫降级链整体 1/3 公司命中(仅 GLEIF),命中也只 2/7、且无注册号。
-- **数据形态**:Tavily 走网页摘要 → LLM 归纳;爬虫降级链中只有 GLEIF(REST JSON)能结构化产出,HTML 类源(MOC/OpenCorp/Wiki)全军覆没。
-- **命中路径**:降级链证明"多源兜底"有一定价值(KHALIBRE 靠 GLEIF 救回),但救回的数据质量低(2/7)。
-- **适用场景**:工商基础**仍以 Tavily+LLM 为主**;GLEIF 可作为"有 LEI 的大中型企业"的结构化补充源;HTML 爬虫(MOC/OpenCorp/Wiki)在柬埔寨不可行。
+- **字段覆盖**:Tavily+LLM 1~3/7(全称/国别/注册号);爬虫降级链 2/5 公司命中(均为大企业、靠 Wikipedia),命中也只 2/7、无注册号。
+- **数据形态**:Tavily 走网页摘要 → LLM 归纳;爬虫降级链中只有 REST 类源(Wikipedia summary / GLEIF JSON)能结构化产出,HTML 类源(MOC/OpenCorp)全军覆没。
+- **规模敏感**:爬虫降级链对**大企业**有效(Wikipedia 有词条),对**中小企业**几乎无效(公开源无收录);Tavily+LLM 受规模影响相对小。
+- **适用场景**:工商基础**仍以 Tavily+LLM 为主**;Wikipedia/GLEIF 作为"知名大企业"的结构化补充源(且都需命中校验);HTML 爬虫(MOC/OpenCorp)在柬埔寨不可行。
 
 ## 4. 司法舆情维度
 
