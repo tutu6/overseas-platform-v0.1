@@ -33,11 +33,42 @@ class CrawlerError(Exception):
         self.status_code = status_code
 
 
-async def fetch_html(url: str, timeout: int = 20) -> str:
+async def fetch_html(url: str, timeout: int = 20, extra_headers: dict | None = None) -> str:
     """抓取页面 HTML。4xx/5xx/网络错误 → CrawlerError(带状态码)。"""
+    headers = dict(_HEADERS)
+    if extra_headers:
+        headers.update(extra_headers)
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(url, headers=_HEADERS)
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            return resp.text
+    except httpx.HTTPStatusError as exc:
+        raise CrawlerError(f"HTTP {exc.response.status_code}", exc.response.status_code) from exc
+    except httpx.HTTPError as exc:
+        raise CrawlerError(f"请求失败: {exc}") from exc
+
+
+async def fetch_html_warmup(homepage: str, url: str, timeout: int = 20) -> str:
+    """媒体站基础反爬规避:同一 client 先 GET 首页拿 Cookie,带 Referer 再抓目标页。
+
+    仍 403 即抛 CrawlerError(不引入 Playwright / 代理,接受现状)。
+    """
+    headers = dict(_HEADERS)
+    headers["Accept"] = (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,*/*;q=0.8"
+    )
+    headers["Referer"] = homepage
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True, headers=headers
+        ) as client:
+            try:
+                await client.get(homepage)  # 预热:拿 Cookie,失败忽略
+            except httpx.HTTPError:
+                pass
+            resp = await client.get(url)
             resp.raise_for_status()
             return resp.text
     except httpx.HTTPStatusError as exc:

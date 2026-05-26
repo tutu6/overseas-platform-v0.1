@@ -24,7 +24,7 @@ async def tavily_search(
         "api_key": api_key,
         "query": query,
         "max_results": max_results,
-        "search_depth": "basic",
+        "search_depth": "advanced",  # advanced 返回更长 content,LLM 抽字段命中率更高(2 credits/次)
         "include_answer": False,
     }
     if country:

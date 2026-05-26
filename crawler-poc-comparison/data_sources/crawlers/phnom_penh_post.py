@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
-from data_sources.crawlers.base import abs_url, fetch_html, is_negative, parse_date_loose
+from data_sources.crawlers.base import abs_url, fetch_html_warmup, is_negative, parse_date_loose
 from schemas import LegalArticle
 
 
@@ -16,7 +16,7 @@ class PhnomPenhPostCrawler:
     async def fetch(self, company_name: str) -> list[LegalArticle]:
         """失败抛 CrawlerError(由 service 捕获)。"""
         url = f"{self.BASE_URL}/search?keys={quote(company_name)}"
-        html = await fetch_html(url)
+        html = await fetch_html_warmup(self.BASE_URL, url)
         soup = BeautifulSoup(html, "lxml")
         nodes = (
             soup.select(".views-row")

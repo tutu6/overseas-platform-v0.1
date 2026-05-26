@@ -42,7 +42,7 @@ v1.2 工商爬虫升级为 4 级降级链:**MOC → OpenCorporates → Wikipedia
 | 源 | 触发次数 | ok | access_restricted | no_match | 说明 |
 |---|---|---|---|---|---|
 | moc.gov.kh | 5 | 0 | 5 | 0 | 全 HTTP 403,首请求即拒 |
-| opencorporates.com | 5 | 0 | 0 | 5 | 可连但搜索结果未解析出公司(反爬返回页 / DOM 未适配 / 无 KH 数据) |
+| opencorporates.com | 5 | 0 | 5 | 0 | HAProxy/JS 挑战页(HTTP 200 但实为 captcha 页),httpx 抓不过,需浏览器执行 JS |
 | en.wikipedia.org | 5 | 2 | 0 | 3 | REST API:大企业(ACLEDA/Kampot)有词条命中;中小企业 404 无词条 |
 | api.gleif.org | 3 | 0 | 0 | 3 | 仅中小企业触发;模糊匹配返回 F.U.G.I GOLD,经命中校验拒绝,无真命中 |
 
@@ -66,7 +66,7 @@ v1.2 工商爬虫升级为 4 级降级链:**MOC → OpenCorporates → Wikipedia
 #### 3.2.4 站点访问特征
 
 - `moc.gov.kh`:HTTP 403,WAF / 需登录,纯爬不可行
-- `opencorporates.com`:可连但搜索页未解析出结果(疑反爬返回页 / 详情需登录)
+- `opencorporates.com`:URL/DOM 已按真实结构修正,但站点有 HAProxy/JS 挑战页(返回 200 captcha 页),纯 httpx 不可行(需浏览器执行 JS,PoC 不引入)
 - `en.wikipedia.org`:REST summary API 可用,但须遵守 Wikimedia UA 策略(UA 带 URL+email 联系方式),否则 403;仅大企业有词条
 - `api.gleif.org`:REST JSON 可调,但 `filter[legalName]` 是模糊匹配会返回不相关公司,**必须做命中校验**;柬埔寨中小企业基本无 LEI 记录
 
