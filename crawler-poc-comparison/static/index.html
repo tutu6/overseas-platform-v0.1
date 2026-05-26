@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>柬埔寨供应商信用评估 PoC · 双源对照</title>
+  <style>
+    body { font-family: -apple-system, "PingFang SC", sans-serif; margin: 24px; color: #222; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 16px; border-left: 4px solid #2a6; padding-left: 8px; margin-top: 28px; }
+    .bar { margin: 14px 0; }
+    .bar input[type=text] { width: 320px; padding: 8px; font-size: 14px; }
+    .bar button { padding: 8px 16px; font-size: 14px; cursor: pointer; }
+    .quick button { margin: 4px 4px 0 0; padding: 5px 10px; font-size: 12px; background: #eef; border: 1px solid #ccd; border-radius: 4px; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; max-width: 980px; font-size: 13px; }
+    th, td { border: 1px solid #ddd; padding: 7px 10px; text-align: left; vertical-align: top; }
+    th { background: #f6f6f6; }
+    .col-field { width: 130px; color: #555; }
+    .null { color: #bbb; }
+    .legal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 980px; }
+    .legal-col { border: 1px solid #ddd; border-radius: 6px; padding: 12px; }
+    .legal-col h3 { margin: 0 0 8px; font-size: 14px; }
+    .article { border-top: 1px solid #eee; padding: 6px 0; font-size: 12px; }
+    .article .neg { color: #c0392b; font-weight: bold; }
+    .article a { color: #2a6; text-decoration: none; }
+    .article .meta { color: #999; }
+    .tag { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 11px; margin-left: 4px; }
+    .tag.hit { background: #d5f0d5; color: #2a6; }
+    .tag.miss { background: #eee; color: #888; }
+    .tag.fail { background: #f8d7d5; color: #c0392b; }
+    .meta-line { font-size: 12px; color: #666; margin-top: 6px; }
+    #status { margin: 10px 0; color: #666; }
+    details { margin-top: 18px; max-width: 980px; font-size: 12px; }
+    pre { background: #f6f6f6; padding: 10px; overflow-x: auto; max-height: 360px; }
+  </style>
+</head>
+<body>
+  <h1>柬埔寨供应商信用评估 PoC · 双源对照</h1>
+  <div class="bar">
+    公司名称: <input id="company" type="text" value="Kampot Cement">
+    <button onclick="doSearch()">查询</button>
+    <label style="margin-left:10px;font-size:13px"><input type="checkbox" id="force"> 强制刷新(绕过 Tavily 缓存)</label>
+  </div>
+  <div class="quick">
+    快捷测试:
+    <button onclick="quick('KHALIBRE CO.,LTD')">KHALIBRE</button>
+    <button onclick="quick('T.S SPORT (CAMBODIA) CO., LTD.')">T.S SPORT</button>
+    <button onclick="quick('Kampot Cement')">Kampot Cement</button>
+    <button onclick="quick('Acleda Bank')">Acleda Bank</button>
+  </div>
+  <div id="status"></div>
+  <div id="result"></div>
+
+  <details id="meta-box" style="display:none">
+    <summary>完整调用元信息(ComparisonResponse JSON)</summary>
+    <pre id="meta"></pre>
+  </details>
+
+  <script>
+    const FIELDS = [
+      ["company_full_name", "企业全称"], ["country_region", "国家/地区"],
+      ["registration_no", "注册号"], ["established_date", "成立日期"],
+      ["legal_representative", "法人代表"], ["business_scope", "经营范围"],
+      ["registered_capital", "注册资本"],
+    ];
+
+    function quick(name) { document.getElementById('company').value = name; doSearch(); }
+
+    function cacheTag(r) {
+      if (r.status !== 'success' && r.status !== 'not_found' && r.status !== 'partial')
+        return `<span class="tag fail">${r.status}</span>`;
+      return r.cache_hit ? '<span class="tag hit">缓存命中</span>' : '<span class="tag miss">实时</span>';
+    }
+    function cell(v) { return v == null || v === '' ? '<span class="null">—</span>' : v; }
+
+    function renderBasic(t, c) {
+      let rows = FIELDS.map(([k, label]) =>
+        `<tr><td class="col-field">${label}</td><td>${cell(t.fields[k])}</td><td>${cell(c.fields[k])}</td></tr>`
+      ).join('');
+      return `
+      <h2>维度 1 · 工商基础(PRD §Δ10 · 7 字段)</h2>
+      <table>
+        <tr><th class="col-field">字段</th><th>Tavily + LLM ${cacheTag(t)}</th><th>爬虫(MOC 官网) ${cacheTag(c)}</th></tr>
+        ${rows}
+        <tr><td class="col-field">填充率</td><td>${t.fields_filled}/7</td><td>${c.fields_filled}/7</td></tr>
+        <tr><td class="col-field">耗时</td><td>${t.duration_ms}ms</td><td>${c.duration_ms}ms</td></tr>
+        <tr><td class="col-field">状态</td><td>${t.status}${t.error_detail ? ' · ' + t.error_detail : ''}</td><td>${c.status}${c.error_detail ? ' · ' + c.error_detail : ''}</td></tr>
+        <tr><td class="col-field">来源</td><td>${cell(t.source_url)}</td><td>${cell(c.source_url)}</td></tr>
+      </table>`;
+    }
+
+    function renderArticles(r) {
+      if (r.status !== 'success' && r.articles.length === 0)
+        return `<div class="null">${r.status}${r.error_detail ? ' · ' + r.error_detail : ''}</div>`;
+      if (r.articles.length === 0) return '<div class="null">无相关文章</div>';
+      return r.articles.map(a => `<div class="article">
+        ${a.is_negative ? '<span class="neg">[负面] </span>' : ''}<a href="${a.url}" target="_blank">${a.title}</a>
+        <div class="meta">${a.source_site} · ${a.published_date || '日期未知'}</div>
+      </div>`).join('');
+    }
+
+    function renderLegal(t, c) {
+      return `
+      <h2>维度 4 · 司法舆情</h2>
+      <div class="legal-grid">
+        <div class="legal-col">
+          <h3>Tavily + LLM ${cacheTag(t)}</h3>
+          <div class="meta-line">文章 ${t.article_count} · 负面 ${t.negative_count} · 最近 ${t.latest_published || '—'} · ${t.duration_ms}ms</div>
+          ${renderArticles(t)}
+        </div>
+        <div class="legal-col">
+          <h3>爬虫(媒体站) ${cacheTag(c)}</h3>
+          <div class="meta-line">文章 ${c.article_count} · 负面 ${c.negative_count} · 最近 ${c.latest_published || '—'} · ${c.duration_ms}ms</div>
+          ${renderArticles(c)}
+        </div>
+      </div>`;
+    }
+
+    async function doSearch() {
+      const name = document.getElementById('company').value.trim();
+      const force = document.getElementById('force').checked;
+      const statusEl = document.getElementById('status');
+      const resultEl = document.getElementById('result');
+      if (!name) { statusEl.textContent = '请输入公司名'; return; }
+      statusEl.textContent = '4 路并发爬取中...'; resultEl.innerHTML = '';
+      document.getElementById('meta-box').style.display = 'none';
+      try {
+        const resp = await fetch('/api/poc/compare', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_name: name, force_refresh: force }),
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + (await resp.text()));
+        const d = await resp.json();
+        resultEl.innerHTML = renderBasic(d.basic_tavily, d.basic_crawler) + renderLegal(d.legal_tavily, d.legal_crawler);
+        document.getElementById('meta').textContent = JSON.stringify(d, null, 2);
+        document.getElementById('meta-box').style.display = 'block';
+        statusEl.textContent = '';
+      } catch (e) {
+        statusEl.textContent = '查询失败:' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
