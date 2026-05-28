@@ -37,6 +37,9 @@ class Permissions:
     CREDIT_WRITE = "credit:write"
     CREDIT_RECOMPUTE = "credit:recompute"
 
+    # ----- 业务-档案:catalog(主线一品类资料卡)-----
+    CATALOG_READ = "catalog:read"
+
     # ----- 业务-交易:project -----
     PROJECT_READ = "project:read"
     PROJECT_WRITE = "project:write"
@@ -118,6 +121,8 @@ PERMISSION_META: dict[str, dict[str, str]] = {
     Permissions.CREDIT_READ: {"name": "查看信用评估", "module": ModuleLabel.BIZ_ARCHIVE},
     Permissions.CREDIT_WRITE: {"name": "维护信用评估档案", "module": ModuleLabel.BIZ_ARCHIVE},
     Permissions.CREDIT_RECOMPUTE: {"name": "触发评分重算", "module": ModuleLabel.BIZ_ARCHIVE},
+
+    Permissions.CATALOG_READ: {"name": "查看品类资料卡", "module": ModuleLabel.BIZ_ARCHIVE},
 
     Permissions.PROJECT_READ: {"name": "查看项目", "module": ModuleLabel.BIZ_TRADE},
     Permissions.PROJECT_WRITE: {"name": "管理项目", "module": ModuleLabel.BIZ_TRADE},

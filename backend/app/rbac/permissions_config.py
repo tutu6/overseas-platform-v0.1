@@ -40,6 +40,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.ORDER_WRITE,
         # 信用评估 — 仅查看(工单 §3.7)
         Permissions.CREDIT_READ,
+        # 主线一品类资料卡 — 查看
+        Permissions.CATALOG_READ,
     ],
     "SUPPLIER": [
         *_AUTH_BASE,
@@ -84,6 +86,8 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         Permissions.CREDIT_READ,
         Permissions.CREDIT_WRITE,
         Permissions.CREDIT_RECOMPUTE,
+        # 主线一品类资料卡 — 查看(SUPPLIER 不配,接口侧 403;ADMIN 不触业务,不配)
+        Permissions.CATALOG_READ,
     ],
     "ADMIN": [
         *_AUTH_BASE,
