@@ -31,7 +31,6 @@ from app.db.models import (
     CreditDataHarvestRun,
     HarvestRunStatus,
     HarvestTriggeredBy,
-    ScoreSnapshot,
     TriggerType,
 )
 from app.db.session import AsyncSessionLocal
@@ -41,10 +40,9 @@ from app.services.credit.harvester.public_web_harvester import (
     HarvestResult,
     PublicWebHarvester,
 )
-from app.services.credit.ai_summary_generator import AISummaryGenerator
 from app.services.credit.harvester.tavily_client import TavilyClient
 from app.services.credit.scoring_engine import ScoringEngine
-from app.services.llm import LLMUnavailableError, QwenChatService
+from app.services.llm import QwenChatService
 
 logger = logging.getLogger(__name__)
 
@@ -410,16 +408,7 @@ async def run_harvest_for_company(
     )
     await session.flush()
 
-    # 7. AI 评价:在本后台任务内生成(harvest 本就是异步任务,不阻塞用户请求)。
-    #    这样详情接口无需再同步现算 ai_summary。失败不影响评分落库。
-    try:
-        await AISummaryGenerator(QwenChatService(settings)).generate_for_snapshot(
-            session, snapshot.id
-        )
-    except LLMUnavailableError as exc:
-        logger.info("AI 评价跳过(LLM 不可用)company=%s: %s", company_id, exc)
-    except Exception:  # noqa: BLE001 — AI 评价失败不阻断 harvest 主流程
-        logger.exception("AI 评价生成抛错 company=%s", company_id)
+    # Δ8:删除 AI 评语自动生成,改为详情页按需触发(POST .../ai-summary/generate)
 
     logger.info(
         "harvest done company=%s run=%s status=%s dims=%s",
@@ -449,17 +438,8 @@ async def harvest_after_register(supplier_org_id: int) -> None:
             # 本期仅柬埔寨抓真实数据源;其他国别仍 mock,无需 harvest
             if company.country_code != "KH":
                 return
-            # 防御:确认 Δ5 占位评分已完成(至少一条 snapshot),否则跳过
-            has_snap = (
-                await db.execute(
-                    select(ScoreSnapshot.id)
-                    .where(ScoreSnapshot.company_id == company.id)
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            if has_snap is None:
-                logger.warning("harvest skip: company=%s 尚无占位评分(Δ5 未完成)", company.id)
-                return
+            # Δ8:KH 不再写 mock 占位 snapshot,故删除"必须有 snapshot 才继续"的前置守卫,
+            #     注册链尾直接抓取真实数据
             await run_harvest_for_company(
                 db, company.id, triggered_by=HarvestTriggeredBy.SUPPLIER_REGISTER
             )

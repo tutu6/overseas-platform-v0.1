@@ -60,6 +60,8 @@ from app.schemas.credit import (
     SnapshotOut,
     TriggerDetail,
 )
+from app.audit.logger import write_audit
+from app.db.models.audit_log import AuditStatus
 from app.services.credit.ai_summary_generator import AISummaryGenerator
 from app.services.credit.data_source.registry import resolve_data_source
 from app.services.credit.harvester.harvest_task import manual_harvest
@@ -103,7 +105,11 @@ _HARVEST_STATUS_TO_EVAL = {
 async def _evaluation_status(
     db: AsyncSession, company: CreditCompany
 ) -> tuple[str, dict | None]:
-    """Δ7 评分状态判定。非 KH 公司无 harvest 概念,恒 ready;KH 看最近一条 harvest_run。"""
+    """Δ8 评分状态判定。非 KH 公司恒 ready;KH 看最近一条 harvest_run。
+
+    Δ8:KH 不再写 mock 占位 snapshot。新增 empty 态——抓取成功完成(succeeded/
+    partial_succeeded/cached_hit)但无 current snapshot(公开源 0 命中),区别于 ready。
+    """
     if company.country_code != "KH":
         return "ready", None
     run = (await db.execute(
@@ -113,12 +119,22 @@ async def _evaluation_status(
         .limit(1)
     )).scalar_one_or_none()
     if run is None:
-        return "pending", None  # KH 公司注册时应已触发,无 run 是防御态
+        return "pending", None  # 注册刚完成,Task 还没启动
     latest = {
         "id": run.id, "status": run.status, "triggered_by": run.triggered_by,
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
     }
+    # 抓取已成功完成:有 current snapshot → ready;无 → empty(0 命中,未生成评分)
+    if run.status in ("succeeded", "partial_succeeded", "cached_hit"):
+        has_snap = (await db.execute(
+            select(ScoreSnapshot.id).where(
+                ScoreSnapshot.company_id == company.id,
+                ScoreSnapshot.is_current.is_(True),
+            )
+        )).scalar_one_or_none()
+        return ("ready" if has_snap is not None else "empty"), latest
+    # pending / running / failed
     return _HARVEST_STATUS_TO_EVAL.get(run.status, "pending"), latest
 
 
@@ -345,6 +361,118 @@ async def recompute_company(
         logger.exception("AI summary 生成抛错 company_id=%s", company_id)
 
     return success(SnapshotOut.model_validate(snapshot).model_dump(mode="json"))
+
+
+# =============================================================================
+# 3a. AI 评语按需触发(Δ8,详情页按钮同步生成)
+# =============================================================================
+
+@router.post(
+    "/companies/{company_id}/ai-summary/generate",
+    summary="按需触发 AI 评语生成(同步)",
+)
+async def generate_ai_summary(
+    request: Request,
+    company_id: int = Path(..., ge=1),
+    current: CurrentUser = Depends(require_permission(Permissions.CREDIT_READ)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Δ8:同步生成 AI 评语并写库。前端展示 loading 态,完成后刷新详情。
+
+    - 无 current snapshot → 400(评分未就绪,无法生成)
+    - 已生成过(ai_summary 非空)→ 直接返回缓存文本,不重复调 LLM
+    - LLM 失败(generate_for_snapshot 返回 None)→ 503
+
+    审计:所有调用(成功/缓存命中/失败)都记一条 audit_log,记 user_id + snapshot_id,
+    便于 LLM 成本归因与异常排查(CLAUDE.md「任何业务写操作必记 audit」)。
+    """
+    company = await _verify_company_access(db, current, company_id)
+
+    snapshot = (await db.execute(
+        select(ScoreSnapshot).where(
+            ScoreSnapshot.company_id == company.id,
+            ScoreSnapshot.is_current.is_(True),
+        )
+    )).scalar_one_or_none()
+
+    if snapshot is None:
+        await write_audit(
+            db,
+            resource_type="credit_ai_summary",
+            action="GENERATE",
+            status=AuditStatus.FAILED,
+            user_id=current.id,
+            user_email=current.email,
+            resource_id=None,
+            request=request,
+            error_message="snapshot_not_ready",
+            extra={"company_id": company_id},
+        )
+        raise BusinessError(
+            http_status=400, biz_code=40001, message="评分未就绪,无法生成 AI 评语"
+        )
+
+    if snapshot.ai_summary:
+        await write_audit(
+            db,
+            resource_type="credit_ai_summary",
+            action="GENERATE",
+            status=AuditStatus.SUCCESS,
+            user_id=current.id,
+            user_email=current.email,
+            resource_id=snapshot.id,
+            request=request,
+            extra={"company_id": company_id, "cached": True},
+        )
+        return success({
+            "ai_summary": snapshot.ai_summary,
+            "generated_at": (
+                snapshot.ai_summary_generated_at.isoformat()
+                if snapshot.ai_summary_generated_at else None
+            ),
+            "cached": True,
+        })
+
+    text = await AISummaryGenerator(_llm_service()).generate_for_snapshot(db, snapshot.id)
+    await db.commit()
+
+    if text is None:
+        await write_audit(
+            db,
+            resource_type="credit_ai_summary",
+            action="GENERATE",
+            status=AuditStatus.FAILED,
+            user_id=current.id,
+            user_email=current.email,
+            resource_id=snapshot.id,
+            request=request,
+            error_message="llm_unavailable",
+            extra={"company_id": company_id},
+        )
+        raise BusinessError(
+            http_status=503, biz_code=50301, message="AI 评语暂时不可用,请稍后重试"
+        )
+
+    await db.refresh(snapshot)
+    await write_audit(
+        db,
+        resource_type="credit_ai_summary",
+        action="GENERATE",
+        status=AuditStatus.SUCCESS,
+        user_id=current.id,
+        user_email=current.email,
+        resource_id=snapshot.id,
+        request=request,
+        extra={"company_id": company_id, "cached": False},
+    )
+    return success({
+        "ai_summary": text,
+        "generated_at": (
+            snapshot.ai_summary_generated_at.isoformat()
+            if snapshot.ai_summary_generated_at else None
+        ),
+        "cached": False,
+    })
 
 
 # =============================================================================

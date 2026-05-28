@@ -12,7 +12,6 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.db.base import _utcnow
 from app.db.models import (
     CreditCompany,
@@ -26,14 +25,12 @@ from app.db.models import (
 )
 from app.db.models.supplier_organization import SupplierOrganization
 from app.db.session import AsyncSessionLocal
-from app.services.credit.ai_summary_generator import AISummaryGenerator
 from app.services.credit.data_source.mock_data_source import MockDataSource
 from app.services.credit.mock_data_generator import (
     MockCreditDataBundle,
     generate_mock_credit_data_for_supplier,
 )
 from app.services.credit.scoring_engine import ScoringEngine
-from app.services.llm import LLMUnavailableError, QwenChatService
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +74,14 @@ async def create_credit_for_supplier(
     （收编是为兼容 dev/prod 历史遗留的"平台外 demo"行 linked=NULL 同名情况,
       避免撞 UNIQUE(country_code, name)。)
     **调用方负责 commit。** ScoringEngine 在同 session 内读 flush 后的数据。
+
+    Δ8:柬埔寨改为不写 mock 占位评分——仅建/收编 credit_company 行(空数据、
+    无 snapshot),真实数据留待注册链尾的 harvest 抓取。run_ai 参数保留兼容
+    seed/测试调用方,但函数体内不再自动生成 AI 评语(改为详情页按需触发)。
     """
-    bundle = generate_mock_credit_data_for_supplier(supplier_org, target_tier)
+    is_kh = supplier_org.country_code == "KH"
+    # KH 不生成 mock 数据;其他 8 国保留原 mock 占位流程
+    bundle = None if is_kh else generate_mock_credit_data_for_supplier(supplier_org, target_tier)
 
     company = (await db.execute(
         select(CreditCompany).where(
@@ -103,7 +106,7 @@ async def create_credit_for_supplier(
         )).scalar_one_or_none() is not None
         if has_snapshot:
             return None  # 已评分,幂等跳过(收编的 link 改动由调用方 commit)
-        # 有镜像但无 snapshot(异常残留)→ 复用 company 补数据 + 评分
+        # 有镜像但无 snapshot(异常残留 / KH 待抓取)→ 复用 company
         await db.flush()
     else:
         company = CreditCompany(
@@ -112,10 +115,19 @@ async def create_credit_for_supplier(
             country_code=supplier_org.country_code,
             registration_no=supplier_org.registration_no,
             linked_supplier_org_id=supplier_org.id,
-            data_status={"expected_grade": bundle.expected_grade},
+            # KH 无 mock 故无 expected_grade;非 KH 写入便于后续比对
+            data_status=None if is_kh else {"expected_grade": bundle.expected_grade},
         )
         db.add(company)
         await db.flush()  # 拿 company.id;同 session 内后续 SELECT 可见
+
+    # === Δ8:KH 在此 return,不写 mock 数据、不算 mock 分,等待 harvest ===
+    if is_kh:
+        logger.info(
+            "credit init: KH supplier_org=%s company=%s 跳过 mock 占位,等待 harvest",
+            supplier_org.id, company.id,
+        )
+        return company
 
     _persist_bundle(db, company.id, bundle)
     await db.flush()  # 让 ScoringEngine 的 MockDataSource SELECT 读到
@@ -129,14 +141,7 @@ async def create_credit_for_supplier(
         operator_user_id=None,
     )
 
-    if run_ai:
-        try:
-            generator = AISummaryGenerator(QwenChatService(settings))
-            await generator.generate_for_snapshot(db, snapshot.id)
-        except LLMUnavailableError as exc:
-            logger.info("AI 评价跳过(LLM 不可用)supplier_org=%s: %s", supplier_org.id, exc)
-        except Exception:  # noqa: BLE001 — AI 失败不阻断评分落库
-            logger.exception("AI 评价生成抛错 supplier_org=%s", supplier_org.id)
+    # Δ8:删除 AI 评语自动生成,改为详情页按需触发
 
     logger.info(
         "credit init done supplier_org=%s company=%s score=%s grade=%s (expected %s)",
