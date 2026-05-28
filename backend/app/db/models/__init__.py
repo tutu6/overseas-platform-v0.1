@@ -2,7 +2,6 @@
 from app.db.models.audit_log import AuditLog
 from app.db.models.buyer_member import BuyerMember
 from app.db.models.buyer_organization import BuyerOrganization
-from app.db.models.category import Category, CategoryLevel
 from app.db.models.credit_ai_conversation import CreditAiConversation
 from app.db.models.credit_ai_message import CreditAiMessage, MessageRole
 from app.db.models.credit_company import CreditCompany
@@ -57,9 +56,6 @@ __all__ = [
     "BuyerMember",
     "SupplierMember",
     "AuditLog",
-    # category
-    "Category",
-    "CategoryLevel",
     # credit assessment - 评分模型骨架
     "ScoreDimension",
     "DimensionCode",
