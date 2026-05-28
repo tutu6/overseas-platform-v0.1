@@ -2,6 +2,20 @@
 from app.db.models.audit_log import AuditLog
 from app.db.models.buyer_member import BuyerMember
 from app.db.models.buyer_organization import BuyerOrganization
+from app.db.models.catalog_attribute import AttrType, CatalogAttribute
+from app.db.models.catalog_attribute_value import CatalogAttributeValue
+from app.db.models.catalog_card import CardReviewStatus, CatalogCard
+from app.db.models.catalog_card_certification import (
+    CatalogCardCertification,
+    CertCredibility,
+    CertSource,
+    CertVerifyStatus,
+)
+from app.db.models.catalog_card_supplier import (
+    CardSupplierReviewStatus,
+    CatalogCardSupplier,
+)
+from app.db.models.catalog_category import CategoryStatus, CatalogCategory
 from app.db.models.credit_ai_conversation import CreditAiConversation
 from app.db.models.credit_ai_message import CreditAiMessage, MessageRole
 from app.db.models.credit_company import CreditCompany
@@ -56,6 +70,20 @@ __all__ = [
     "BuyerMember",
     "SupplierMember",
     "AuditLog",
+    # catalog - 主线一品类资料卡(B 层 EAV + A 层资料卡)
+    "CatalogCategory",
+    "CategoryStatus",
+    "CatalogAttribute",
+    "AttrType",
+    "CatalogAttributeValue",
+    "CatalogCard",
+    "CardReviewStatus",
+    "CatalogCardSupplier",
+    "CardSupplierReviewStatus",
+    "CatalogCardCertification",
+    "CertSource",
+    "CertCredibility",
+    "CertVerifyStatus",
     # credit assessment - 评分模型骨架
     "ScoreDimension",
     "DimensionCode",
