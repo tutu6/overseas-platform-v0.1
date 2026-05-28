@@ -7,6 +7,7 @@ harvest_after_register / manual_harvest:BackgroundTask 入口,各用独立 sessi
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -40,7 +41,7 @@ from app.services.credit.harvester.public_web_harvester import (
     HarvestResult,
     PublicWebHarvester,
 )
-from app.services.credit.harvester.tavily_client import TavilyClient
+from app.services.credit.harvester.tavily_client import TavilyClient, TavilySearchResult
 from app.services.credit.scoring_engine import ScoringEngine
 from app.services.llm import QwenChatService
 
@@ -53,13 +54,147 @@ _PROMPTS_ROOT = Path(__file__).parent / "prompts"
 # helpers
 # =============================================================================
 
+# =============================================================================
+# [2026-05-27 临时关停] Tavily + qwen-plus 外部 API mock(节约费用)
+# -----------------------------------------------------------------------------
+# 原因:评分链路每次抓取消耗 ~10 次 Tavily 调用 + 4 次 qwen LLM 抽取,持续产生费用。
+# 选址:仅替换 _build_harvester 里两个 client 的构造,真实 TavilyClient /
+#       QwenChatService 类与单测均不动。单测全部走 harvester=... 注入,绕开此函数,
+#       故零测试影响;生产路径 (harvest_after_register 仅 KH 触发) 必走此处 →
+#       柬埔寨评分链路零真实外部调用。
+# 后续恢复:删除下方 _MOCK_* 常量与 _Mock* 两个类,取消 _build_harvester 内原构造
+#         注释,删除 mock 构造 + 头部注释块即可。
+#
+# Mock 一致性:_MOCK_TAVILY_CONTENT 内嵌 4 维度所有占位字段的 quote 原文,
+# _MOCK_LLM_JSON 各字段 evidence.quote 均为 content 子串、source_index=0,
+# 通过 PublicWebHarvester 反幻觉后处理(quote ≥10 字符 + fuzzy 匹配 ≥0.3)。
+# =============================================================================
+
+_MOCK_TAVILY_CONTENT = (
+    "[占位 mock 数据] 该柬埔寨公司于 2015-03-12 在柬埔寨商业部(MOC)登记注册,"
+    "注册资本为 500000 美元。经营范围涵盖建筑材料供应、工程设备租赁与基础设施施工服务。"
+    "法定代表人为 Sok Chanthy。主要股东为 Mekong Infrastructure Holdings Co., Ltd.,持股比例 70%。"
+    "公司当前登记状态为正常经营。注册地址位于 No. 128, Street 271, Sangkat Boeung Salang, "
+    "Khan Tuol Kork, Phnom Penh, Cambodia。公司官方网站为 https://example-supplier-kh.com。"
+    "根据公开年报,公司近三年营业收入呈稳定增长态势,资产负债率约为 0.45,经营性现金流持续为正。"
+    "在公开司法与媒体渠道中未检索到该公司涉及诉讼、法院判决或失信被执行的记录,"
+    "也未发现重大负面新闻报道。"
+    "公司已通过 ISO 9001 质量管理体系认证、ISO 14001 环境管理体系认证以及 ISO 45001 职业健康安全管理体系认证。"
+)
+
+_MOCK_TAVILY_URL = "https://mock-placeholder.invalid/profile"
+
+# superset JSON:4 维度 schema 通过 extra=ignore 各取所需字段;evidence dict 保留所有 key
+_MOCK_LLM_JSON: str = json.dumps(
+    {
+        # --- basic ---
+        "established_date": "2015-03-12",
+        "registered_capital": "500000 USD",
+        "business_scope": "建筑材料供应、工程设备租赁与基础设施施工服务",
+        "legal_representative": "Sok Chanthy",
+        "shareholders": "Mekong Infrastructure Holdings Co., Ltd.(70%)",
+        "status_text": "正常",
+        "address": "No. 128, Street 271, Sangkat Boeung Salang, Khan Tuol Kork, Phnom Penh, Cambodia",
+        "website": "https://example-supplier-kh.com",
+        # --- finance ---
+        "revenue_trend": "growing",
+        "debt_ratio": 0.45,
+        "cash_flow_status": "positive",
+        # --- legal ---
+        "litigation_count": 0,
+        "defaulter_unresolved_count": 0,
+        "defaulter_resolved_count": 0,
+        "negative_news_level": "none",
+        # --- qualification ---
+        "has_iso_9001": True,
+        "has_iso_14001": True,
+        "has_iso_45001": True,
+        "has_isc_certification": None,  # 留 null 不冒认 ISC(柬埔寨建筑业强制证)
+        "other_certifications": [],
+        # --- evidence(每个有值字段都给一条,quote 为 content 子串) ---
+        "_evidence": {
+            "established_date": {"quote": "2015-03-12 在柬埔寨商业部(MOC)登记注册", "source_index": 0},
+            "registered_capital": {"quote": "注册资本为 500000 美元", "source_index": 0},
+            "business_scope": {"quote": "经营范围涵盖建筑材料供应、工程设备租赁与基础设施施工服务", "source_index": 0},
+            "legal_representative": {"quote": "法定代表人为 Sok Chanthy", "source_index": 0},
+            "shareholders": {"quote": "主要股东为 Mekong Infrastructure Holdings Co., Ltd.,持股比例 70%", "source_index": 0},
+            "status_text": {"quote": "公司当前登记状态为正常经营", "source_index": 0},
+            "address": {"quote": "注册地址位于 No. 128, Street 271, Sangkat Boeung Salang, Khan Tuol Kork, Phnom Penh, Cambodia", "source_index": 0},
+            "website": {"quote": "公司官方网站为 https://example-supplier-kh.com", "source_index": 0},
+            "revenue_trend": {"quote": "近三年营业收入呈稳定增长态势", "source_index": 0},
+            "debt_ratio": {"quote": "资产负债率约为 0.45", "source_index": 0},
+            "cash_flow_status": {"quote": "经营性现金流持续为正", "source_index": 0},
+            "litigation_count": {"quote": "未检索到该公司涉及诉讼、法院判决或失信被执行的记录", "source_index": 0},
+            "defaulter_unresolved_count": {"quote": "未检索到该公司涉及诉讼、法院判决或失信被执行的记录", "source_index": 0},
+            "defaulter_resolved_count": {"quote": "未检索到该公司涉及诉讼、法院判决或失信被执行的记录", "source_index": 0},
+            "negative_news_level": {"quote": "也未发现重大负面新闻报道", "source_index": 0},
+            "has_iso_9001": {"quote": "已通过 ISO 9001 质量管理体系认证", "source_index": 0},
+            "has_iso_14001": {"quote": "ISO 14001 环境管理体系认证", "source_index": 0},
+            "has_iso_45001": {"quote": "ISO 45001 职业健康安全管理体系认证", "source_index": 0},
+        },
+        "_confidence": "medium",
+        "_notes": "占位 mock 数据(2026-05-27 临时关停 Tavily/qwen 外部 API)",
+    },
+    ensure_ascii=False,
+)
+
+
+class _MockTavilyClient(TavilyClient):
+    """[2026-05-27 临时关停] 不调外部 Tavily API,返回固定占位结果。
+
+    返回结构与 TavilyClient.search 完全一致:list[TavilySearchResult]。
+    """
+
+    async def search(  # type: ignore[override]
+        self,
+        query: str,
+        max_results: int = 5,
+        search_depth: str = "basic",
+        include_domains: list[str] | None = None,
+        country: str | None = None,
+    ) -> list[TavilySearchResult]:
+        # 忽略 api_key / query / whitelist / country,固定返回 1 条占位结果
+        return [
+            TavilySearchResult(
+                title="[Mock 占位] Cambodia company profile",
+                url=_MOCK_TAVILY_URL,
+                content=_MOCK_TAVILY_CONTENT,
+                score=0.95,
+            ),
+        ]
+
+
+class _MockQwenChatService(QwenChatService):
+    """[2026-05-27 临时关停] 不调外部 qwen-plus API,返回固定占位 JSON 字符串。
+
+    返回结构与 QwenChatService.generate_json 完全一致:json.dumps 后的字符串。
+    """
+
+    async def generate_json(  # type: ignore[override]
+        self,
+        prompt: str,
+        *,
+        timeout_seconds: int | None = None,
+    ) -> str:
+        # 忽略 _check_configured / prompt / timeout,固定返回 superset JSON
+        return _MOCK_LLM_JSON
+
+
 def _build_harvester() -> PublicWebHarvester:
-    tavily = TavilyClient(
-        settings.TAVILY_API_KEY,
-        settings.TAVILY_API_URL,
-        settings.TAVILY_TIMEOUT_SECONDS,
+    # [2026-05-27 临时关停] 用 mock 客户端,真实外部 API 调用已停。原构造保留于下方注释,
+    # 后续恢复时删除本块 mock 构造 + 上方 _MOCK_* / _Mock* 定义,取消下方注释即可。
+    tavily: TavilyClient = _MockTavilyClient(
+        api_key="mock-disabled",
+        base_url="https://mock-placeholder.invalid",
     )
-    llm = QwenChatService(settings)
+    llm: QwenChatService = _MockQwenChatService(settings)
+    # 原构造代码(临时关停结束后取消注释):
+    # tavily = TavilyClient(
+    #     settings.TAVILY_API_KEY,
+    #     settings.TAVILY_API_URL,
+    #     settings.TAVILY_TIMEOUT_SECONDS,
+    # )
+    # llm = QwenChatService(settings)
     return PublicWebHarvester(
         tavily,
         llm,
