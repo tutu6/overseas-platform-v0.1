@@ -137,8 +137,10 @@ class CompanyDetailOut(BaseModel):
     finance: FinanceDataOut | None = None
     legal: LegalDataOut | None = None
     certifications: list[CertificationOut] = Field(default_factory=list)
-    # Δ7:抓取/评分状态(前端骨架屏依赖);非 KH 公司恒为 ready
-    evaluation_status: str = "ready"  # pending / ready / failed
+    # Δ7/Δ8:抓取/评分状态(前端骨架屏依赖);非 KH 公司恒为 ready
+    # 值域:pending / ready / empty / failed
+    #   empty = 抓取成功完成但公开源 0 命中,无评分快照(Δ8 新增)
+    evaluation_status: str = "ready"
     latest_harvest_run: dict[str, Any] | None = None
 
 
