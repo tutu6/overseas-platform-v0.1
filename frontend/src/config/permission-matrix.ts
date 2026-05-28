@@ -32,6 +32,8 @@ export const Permissions = {
   CREDIT_WRITE: "credit:write",
   CREDIT_RECOMPUTE: "credit:recompute",
 
+  CATALOG_READ: "catalog:read",
+
   PROJECT_READ: "project:read",
   PROJECT_WRITE: "project:write",
 
@@ -69,7 +71,7 @@ export type PermissionCode = (typeof Permissions)[keyof typeof Permissions];
 // ---------- 资源域(v3 §2 + 信用评估 §六,16 个)----------
 
 export type ResourceCode =
-  | "supplier" | "product" | "country" | "credit"
+  | "supplier" | "product" | "country" | "credit" | "catalog"
   | "project" | "purchase_list" | "cart" | "rfq" | "quote" | "order"
   | "membership" | "risk"
   | "user" | "role" | "permission" | "system";
@@ -79,6 +81,7 @@ export const RESOURCES: Record<ResourceCode, { code: ResourceCode; name: string;
   product:       { code: "product",       name: "商品 SKU",   module: "业务-档案" },
   country:       { code: "country",       name: "国别准入",   module: "业务-档案" },
   credit:        { code: "credit",        name: "信用评估",   module: "业务-档案" },
+  catalog:       { code: "catalog",       name: "品类资料卡", module: "业务-档案" },
   project:       { code: "project",       name: "项目",       module: "业务-交易" },
   purchase_list: { code: "purchase_list", name: "采购清单",   module: "业务-交易" },
   cart:          { code: "cart",          name: "购物车",     module: "业务-交易" },
@@ -99,28 +102,28 @@ export type Scope = "ALL" | "ORG" | "OWN" | "NONE";
 
 export const ROLE_RESOURCE_SCOPE: Record<RoleCode, Record<ResourceCode, Scope>> = {
   BUYER: {
-    supplier: "ALL", product: "ALL", country: "ALL", credit: "ALL",
+    supplier: "ALL", product: "ALL", country: "ALL", credit: "ALL", catalog: "ALL",
     project: "ORG", purchase_list: "ORG", cart: "OWN",
     rfq: "ORG", quote: "ORG", order: "ORG",
     membership: "NONE", risk: "NONE",
     user: "NONE", role: "NONE", permission: "NONE", system: "NONE",
   },
   SUPPLIER: {
-    supplier: "OWN", product: "OWN", country: "ALL", credit: "NONE",
+    supplier: "OWN", product: "OWN", country: "ALL", credit: "NONE", catalog: "NONE",
     project: "NONE", purchase_list: "NONE", cart: "NONE",
     rfq: "OWN", quote: "OWN", order: "OWN",
     membership: "OWN", risk: "NONE",
     user: "NONE", role: "NONE", permission: "NONE", system: "NONE",
   },
   OPERATOR: {
-    supplier: "ALL", product: "ALL", country: "ALL", credit: "ALL",
+    supplier: "ALL", product: "ALL", country: "ALL", credit: "ALL", catalog: "ALL",
     project: "ALL", purchase_list: "ALL", cart: "NONE",
     rfq: "ALL", quote: "ALL", order: "ALL",
     membership: "ALL", risk: "ALL",
     user: "NONE", role: "NONE", permission: "NONE", system: "NONE",
   },
   ADMIN: {
-    supplier: "NONE", product: "NONE", country: "NONE", credit: "NONE",
+    supplier: "NONE", product: "NONE", country: "NONE", credit: "NONE", catalog: "NONE",
     project: "NONE", purchase_list: "NONE", cart: "NONE",
     rfq: "NONE", quote: "NONE", order: "NONE",
     membership: "NONE", risk: "NONE",
@@ -139,6 +142,7 @@ export const ROLE_RESOURCE_PERMISSIONS: Record<
     product: [Permissions.PRODUCT_READ],
     country: [Permissions.COUNTRY_READ],
     credit: [Permissions.CREDIT_READ],
+    catalog: [Permissions.CATALOG_READ],
     project: [Permissions.PROJECT_READ, Permissions.PROJECT_WRITE],
     purchase_list: [Permissions.PURCHASE_LIST_READ, Permissions.PURCHASE_LIST_WRITE],
     cart: [Permissions.CART_READ, Permissions.CART_WRITE],
@@ -160,6 +164,7 @@ export const ROLE_RESOURCE_PERMISSIONS: Record<
     product: [Permissions.PRODUCT_READ, Permissions.PRODUCT_APPROVE, Permissions.PRODUCT_REJECT],
     country: [Permissions.COUNTRY_READ, Permissions.COUNTRY_WRITE],
     credit: [Permissions.CREDIT_READ, Permissions.CREDIT_WRITE, Permissions.CREDIT_RECOMPUTE],
+    catalog: [Permissions.CATALOG_READ],
     project: [Permissions.PROJECT_READ],
     purchase_list: [Permissions.PURCHASE_LIST_READ],
     rfq: [Permissions.RFQ_READ],

@@ -1,9 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { PublicLayout } from "@/components/layout/PublicLayout";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { Permissions } from "@/config/permission-matrix";
+
+// 本期已上线的品类(只有铝卷一条;新增品类时在此追加,无需改后端)
+// 入口对 SUPPLIER/ADMIN 隐藏(由 PermissionGuard 按 catalog:read 控制)
+const CATALOG_ENTRIES = [
+  { code: "aluminum-coil", name_zh: "铝卷", name_en: "Aluminum Coil" },
+];
 
 // PRD v2.0 §2.2 C5:Filter bar 国家/级别 UI 保留,纯视觉,不接后端
 const countries = [
@@ -78,19 +87,45 @@ export default function MallPage() {
         </section>
 
         <div className="flex flex-col lg:flex-row gap-7">
-          {/* Sidebar — 旧三级分类已下线,新品类资料卡导航待 Step 4 接入 */}
+          {/* Sidebar — 品类资料卡入口(对 SUPPLIER/ADMIN 隐藏) */}
           <aside className="lg:w-56 shrink-0">
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
               <h3 className="font-semibold text-gray-800 text-sm mb-4 flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-[#003366]" />
                 产品分类
               </h3>
-              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-3 py-6 text-center">
-                <p className="text-sm text-gray-500">产品分类即将上线</p>
-                <p className="mt-1 text-xs text-gray-400">
-                  新品类资料卡导航将在后续版本接入
-                </p>
-              </div>
+              <PermissionGuard
+                required={Permissions.CATALOG_READ}
+                fallback={
+                  <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-3 py-6 text-center">
+                    <p className="text-sm text-gray-500">产品分类即将上线</p>
+                  </div>
+                }
+              >
+                <ul className="space-y-1.5">
+                  {CATALOG_ENTRIES.map((c) => (
+                    <li key={c.code}>
+                      <Link
+                        href={`/catalog/${c.code}`}
+                        className="group flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:bg-blue-50 hover:text-[#1D6FF2]"
+                      >
+                        <span className="leading-tight">
+                          <span className="block">{c.name_zh}</span>
+                          {c.name_en && (
+                            <span className="block text-[10px] font-normal text-gray-400 group-hover:text-[#1D6FF2]/70">
+                              {c.name_en}
+                            </span>
+                          )}
+                        </span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-current" />
+                      </Link>
+                    </li>
+                  ))}
+                  <li className="px-3 py-2 text-[11px] text-gray-400">
+                    更多品类陆续上线
+                  </li>
+                </ul>
+              </PermissionGuard>
             </div>
           </aside>
 
