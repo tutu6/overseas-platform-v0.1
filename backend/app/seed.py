@@ -247,6 +247,11 @@ async def run_all_seeds(db: AsyncSession) -> None:
         from app.seed_credit import seed_credit_module
 
         await seed_credit_module(db)
+
+        # 主线一品类资料卡:铝卷 1 张卡(工单 17 · Step 2)
+        from app.seed_catalog import seed_catalog_module
+
+        await seed_catalog_module(db)
     else:
         logger.info(
             "Seed: SEED_DEMO_ACCOUNTS=false → 跳过 demo 内容(中建三局组织 / "
